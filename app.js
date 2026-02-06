@@ -27,10 +27,21 @@ function nowISO() {
 
 function formatDate(iso) {
   const date = new Date(iso);
-  return date.toLocaleString("es-ES", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  if (Number.isNaN(date.getTime())) return "fecha inválida";
+  try {
+    return date.toLocaleString("es-ES", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+      date.getHours()
+    )}:${pad(date.getMinutes())}`;
+  }
 }
 
 function updateNow() {
@@ -256,7 +267,14 @@ async function init() {
   }
 }
 
-init();
+window.addEventListener("error", (event) => {
+  const detail = event && event.message ? event.message : "error no identificado";
+  setMessage(`Error de la app: ${detail}`);
+});
+
+init().catch((error) => {
+  showError("Error al iniciar la app", error);
+});
 
 guardarBtn.addEventListener("click", async () => {
   const value = Number(pesoInput.value);
@@ -353,7 +371,8 @@ limpiarBtn.addEventListener("click", async () => {
   setMessage("Registros borrados.");
 });
 
-loginBtn.addEventListener("click", async () => {
+loginBtn.addEventListener("click", async (event) => {
+  event.preventDefault();
   if (!supabase) {
     setMessage("Supabase no está disponible en este momento.");
     return;

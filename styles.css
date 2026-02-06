@@ -193,6 +193,24 @@ button:active,
   margin-top: 16px;
 }
 
+.auth {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+  min-width: 260px;
+}
+
+.hidden {
+  display: none;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

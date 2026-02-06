@@ -1,4 +1,8 @@
-const STORAGE_KEY = "peso_registros";
+const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const pesoInput = document.getElementById("peso");
 const fechaActual = document.getElementById("fechaActual");
@@ -9,6 +13,11 @@ const exportarBtn = document.getElementById("exportar");
 const importarInput = document.getElementById("importar");
 const limpiarBtn = document.getElementById("limpiar");
 const mensaje = document.getElementById("mensaje");
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const loginBtn = document.getElementById("login");
+const logoutBtn = document.getElementById("logout");
+const sessionStatus = document.getElementById("sessionStatus");
 
 function nowISO() {
   return new Date().toISOString();
@@ -22,20 +31,16 @@ function formatDate(iso) {
   });
 }
 
-function loadRecords() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((r) => r && r.ts && typeof r.weight === "number");
-  } catch {
+async function loadRecords() {
+  const { data, error } = await supabase
+    .from("weights")
+    .select("id, ts, weight")
+    .order("ts", { ascending: true });
+  if (error) {
+    setMessage("No se pudo cargar el historial.");
     return [];
   }
-}
-
-function saveRecords(records) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  return data.map((r) => ({ id: r.id, ts: r.ts, weight: Number(r.weight) }));
 }
 
 function updateNow() {
@@ -57,15 +62,13 @@ function renderTable(records) {
     return;
   }
 
-  const rows = records
-    .slice()
-    .sort((a, b) => new Date(b.ts) - new Date(a.ts))
-    .map((r, index) => {
+  const sorted = records.slice().sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  const rows = sorted.map((r) => {
       return `
         <tr>
           <td>${formatDate(r.ts)}</td>
           <td>${r.weight.toFixed(1)}</td>
-          <td><button class="ghost" data-index="${index}">Eliminar</button></td>
+          <td><button class="ghost" data-id="${r.id}">Eliminar</button></td>
         </tr>
       `;
     })
@@ -75,24 +78,32 @@ function renderTable(records) {
   contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
 }
 
-function addRecord(weight) {
-  const records = loadRecords();
-  records.push({ ts: nowISO(), weight });
-  saveRecords(records);
+async function addRecord(weight) {
+  const { data, error } = await supabase.from("weights").insert({
+    ts: nowISO(),
+    weight,
+  }).select("id, ts, weight");
+
+  if (error) {
+    setMessage("No se pudo guardar el registro.");
+    return;
+  }
+  const records = await loadRecords();
   renderTable(records);
 }
 
-function deleteRecord(index) {
-  const records = loadRecords();
-  const sorted = records.slice().sort((a, b) => new Date(b.ts) - new Date(a.ts));
-  const recordToDelete = sorted[index];
-  const filtered = records.filter((r) => !(r.ts === recordToDelete.ts && r.weight === recordToDelete.weight));
-  saveRecords(filtered);
-  renderTable(filtered);
+async function deleteRecord(id) {
+  const { error } = await supabase.from("weights").delete().eq("id", id);
+  if (error) {
+    setMessage("No se pudo eliminar el registro.");
+    return;
+  }
+  const records = await loadRecords();
+  renderTable(records);
 }
 
-function exportCSV() {
-  const records = loadRecords();
+async function exportCSV() {
+  const records = await loadRecords();
   if (records.length === 0) {
     setMessage("No hay registros para exportar.");
     return;
@@ -132,30 +143,47 @@ function parseCSV(text) {
   return records;
 }
 
-function mergeRecords(existing, incoming) {
-  const map = new Map();
-  const all = [...existing, ...incoming];
-  for (const r of all) {
-    map.set(`${r.ts}-${r.weight}`, r);
-  }
-  return Array.from(map.values()).sort((a, b) => new Date(a.ts) - new Date(b.ts));
+function setAuthUI(session) {
+  const loggedIn = Boolean(session?.user);
+  loginBtn.classList.toggle("hidden", loggedIn);
+  logoutBtn.classList.toggle("hidden", !loggedIn);
+  emailInput.disabled = loggedIn;
+  passwordInput.disabled = loggedIn;
+  sessionStatus.textContent = loggedIn ? session.user.email : "sin sesión";
 }
 
-function init() {
+async function ensureSession() {
+  const { data } = await supabase.auth.getSession();
+  setAuthUI(data.session);
+  return data.session;
+}
+
+async function init() {
   updateNow();
   setInterval(updateNow, 1000);
-  renderTable(loadRecords());
+  const session = await ensureSession();
+  if (session) {
+    const records = await loadRecords();
+    renderTable(records);
+  } else {
+    renderTable([]);
+  }
 }
 
 init();
 
-guardarBtn.addEventListener("click", () => {
+guardarBtn.addEventListener("click", async () => {
   const value = Number(pesoInput.value);
   if (Number.isNaN(value) || value <= 0) {
     setMessage("Ingresa un peso válido.");
     return;
   }
-  addRecord(Number(value.toFixed(1)));
+  const session = await ensureSession();
+  if (!session) {
+    setMessage("Inicia sesión para guardar.");
+    return;
+  }
+  await addRecord(Number(value.toFixed(1)));
   pesoInput.value = "";
   setMessage("Registro guardado.");
 });
@@ -164,12 +192,12 @@ pesoInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") guardarBtn.click();
 });
 
-tabla.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-index]");
+tabla.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-id]");
   if (!button) return;
-  const index = Number(button.dataset.index);
-  if (Number.isNaN(index)) return;
-  deleteRecord(index);
+  const id = button.dataset.id;
+  if (!id) return;
+  await deleteRecord(id);
   setMessage("Registro eliminado.");
 });
 
@@ -184,16 +212,61 @@ importarInput.addEventListener("change", async (event) => {
     setMessage("No se encontraron registros válidos en el CSV.");
     return;
   }
-  const merged = mergeRecords(loadRecords(), imported);
-  saveRecords(merged);
-  renderTable(merged);
+  const session = await ensureSession();
+  if (!session) {
+    setMessage("Inicia sesión para importar.");
+    return;
+  }
+  const { error } = await supabase.from("weights").insert(imported);
+  if (error) {
+    setMessage("No se pudo importar el CSV.");
+    return;
+  }
+  const records = await loadRecords();
+  renderTable(records);
   setMessage(`Importados ${imported.length} registros.`);
   importarInput.value = "";
 });
 
-limpiarBtn.addEventListener("click", () => {
+limpiarBtn.addEventListener("click", async () => {
   if (!confirm("¿Seguro que quieres borrar todos los registros?")) return;
-  saveRecords([]);
+  const session = await ensureSession();
+  if (!session) {
+    setMessage("Inicia sesión para borrar.");
+    return;
+  }
+  const { error } = await supabase.from("weights").delete().neq("id", 0);
+  if (error) {
+    setMessage("No se pudo borrar.");
+    return;
+  }
   renderTable([]);
   setMessage("Registros borrados.");
+});
+
+loginBtn.addEventListener("click", async () => {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value.trim();
+  if (!email || !password) {
+    setMessage("Ingresa email y clave.");
+    return;
+  }
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    setMessage("No se pudo iniciar sesión.");
+    return;
+  }
+  const session = await ensureSession();
+  if (session) {
+    const records = await loadRecords();
+    renderTable(records);
+    setMessage("Sesión iniciada.");
+  }
+});
+
+logoutBtn.addEventListener("click", async () => {
+  await supabase.auth.signOut();
+  setAuthUI(null);
+  renderTable([]);
+  setMessage("Sesión cerrada.");
 });

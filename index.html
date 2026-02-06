@@ -22,6 +22,28 @@
       </header>
 
       <section class="card">
+        <div class="auth" id="authBox">
+          <div class="auth-info">
+            <h2>Acceso</h2>
+            <p class="subtitle">Ingresa con tu usuario único para sincronizar en la nube.</p>
+          </div>
+          <div class="auth-form">
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" type="email" placeholder="tu@email.com" />
+            </div>
+            <div class="field">
+              <label for="password">Clave</label>
+              <input id="password" type="password" placeholder="••••••••" />
+            </div>
+            <button id="login" class="primary">Entrar</button>
+            <button id="logout" class="ghost hidden">Salir</button>
+          </div>
+        </div>
+        <p class="hint">Sesión activa: <span id="sessionStatus">—</span></p>
+      </section>
+
+      <section class="card">
         <div class="form-row">
           <div class="field">
             <label for="peso">Peso (kg)</label>
@@ -78,6 +100,7 @@
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
   </body>
 </html>

@@ -196,9 +196,13 @@ button:active,
 .auth {
   display: flex;
   gap: 20px;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
+}
+
+.auth-info {
+  max-width: 520px;
 }
 
 .auth-form {

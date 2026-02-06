@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Registro de Peso</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg"></div>
+    <main class="app">
+      <header class="hero">
+        <p class="kicker">Simple · Privado · Local</p>
+        <h1>Registro de Peso</h1>
+        <p class="subtitle">Guarda tus mediciones en este navegador. Exporta o importa CSV cuando quieras.</p>
+      </header>
+
+      <section class="card">
+        <div class="form-row">
+          <div class="field">
+            <label for="peso">Peso (kg)</label>
+            <input id="peso" type="number" inputmode="decimal" step="0.1" min="0" placeholder="Ej: 72.4" />
+          </div>
+          <div class="field">
+            <label>Fecha y hora</label>
+            <div class="readonly" id="fechaActual">—</div>
+          </div>
+          <button id="guardar" class="primary">Registrar</button>
+        </div>
+        <p class="hint">La fecha y hora se guarda automáticamente al momento de registrar.</p>
+      </section>
+
+      <section class="card">
+        <div class="tools">
+          <div class="tool-group">
+            <button id="exportar" class="secondary">Exportar CSV</button>
+            <label class="file-btn" for="importar">
+              Importar CSV
+              <input id="importar" type="file" accept=".csv,text/csv" />
+            </label>
+          </div>
+          <div class="tool-group">
+            <button id="limpiar" class="ghost">Borrar todo</button>
+          </div>
+        </div>
+        <p class="hint">El CSV usa el formato: <span class="mono">timestamp,weight</span> (timestamp en ISO 8601).</p>
+      </section>
+
+      <section class="card table-card">
+        <div class="table-header">
+          <h2>Historial</h2>
+          <span id="contador" class="chip">0 registros</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha y hora</th>
+                <th>Peso (kg)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tabla">
+              <tr class="empty">
+                <td colspan="3">Aún no hay registros.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div id="mensaje" class="message" role="status" aria-live="polite"></div>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

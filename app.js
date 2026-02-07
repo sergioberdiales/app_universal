@@ -1,6 +1,12 @@
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
+const SESSION_KEY = "peso_supabase_session_v1";
+
+const loginCard = document.getElementById("loginCard");
+const sessionCard = document.getElementById("sessionCard");
+const zonaPrivada = document.getElementById("zonaPrivada");
+const estadoApp = document.getElementById("estadoApp");
 
 const pesoInput = document.getElementById("peso");
 const fechaActual = document.getElementById("fechaActual");
@@ -11,15 +17,14 @@ const exportarBtn = document.getElementById("exportar");
 const importarInput = document.getElementById("importar");
 const limpiarBtn = document.getElementById("limpiar");
 const mensaje = document.getElementById("mensaje");
+
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const loginBtn = document.getElementById("login");
 const logoutBtn = document.getElementById("logout");
 const sessionStatus = document.getElementById("sessionStatus");
 
-const supabaseLib = window.supabase;
-const clientReady = Boolean(supabaseLib && typeof supabaseLib.createClient === "function");
-const supabase = clientReady ? supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let currentSession = loadSession();
 
 function nowISO() {
   return new Date().toISOString();
@@ -27,21 +32,12 @@ function nowISO() {
 
 function formatDate(iso) {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "fecha inválida";
-  try {
-    return date.toLocaleString("es-ES", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-      date.getHours()
-    )}:${pad(date.getMinutes())}`;
-  }
+  if (Number.isNaN(date.getTime())) return "fecha invalida";
+
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
 }
 
 function updateNow() {
@@ -49,61 +45,138 @@ function updateNow() {
 }
 
 function setMessage(text) {
-  mensaje.textContent = text;
+  mensaje.textContent = text || "";
   if (!text) return;
+
   setTimeout(() => {
     if (mensaje.textContent === text) mensaje.textContent = "";
   }, 5000);
 }
 
-function showError(prefix, error) {
-  const detail = error && error.message ? `: ${error.message}` : "";
-  setMessage(`${prefix}${detail}`);
+function setStatus(text) {
+  estadoApp.textContent = text || "";
 }
 
-async function getCurrentUser() {
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
-  return data.user;
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.access_token || !parsed.user || !parsed.user.id) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
-async function loadRecords() {
-  if (!supabase) return [];
-  const user = await getCurrentUser();
-  if (!user) return [];
+function saveSession(session) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
 
-  const { data, error } = await supabase
-    .from("weights")
-    .select("id, ts, weight")
-    .eq("user_id", user.id)
-    .order("ts", { ascending: true });
+function clearSession() {
+  currentSession = null;
+  localStorage.removeItem(SESSION_KEY);
+}
 
-  if (error) {
-    showError("No se pudo cargar el historial", error);
-    return [];
+function isSessionExpired(session) {
+  if (!session || !session.expires_at) return true;
+  const now = Math.floor(Date.now() / 1000);
+  return now >= session.expires_at - 30;
+}
+
+async function readJsonSafe(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+async function apiFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  const body = await readJsonSafe(response);
+
+  if (!response.ok) {
+    const detail = body.error_description || body.message || body.error || `HTTP ${response.status}`;
+    throw new Error(detail);
   }
 
-  return data.map((r) => ({ id: r.id, ts: r.ts, weight: Number(r.weight) }));
+  return body;
+}
+
+async function refreshSessionIfNeeded() {
+  if (!currentSession) return null;
+  if (!isSessionExpired(currentSession)) return currentSession;
+  if (!currentSession.refresh_token) {
+    clearSession();
+    return null;
+  }
+
+  try {
+    const refreshed = await apiFetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: currentSession.refresh_token }),
+    });
+
+    currentSession = {
+      access_token: refreshed.access_token,
+      refresh_token: refreshed.refresh_token,
+      expires_at: refreshed.expires_at,
+      user: refreshed.user,
+    };
+    saveSession(currentSession);
+    return currentSession;
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
+function authHeaders() {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${currentSession.access_token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+function setAuthenticatedUI(isAuthenticated) {
+  loginCard.classList.toggle("hidden", isAuthenticated);
+  sessionCard.classList.toggle("hidden", !isAuthenticated);
+  zonaPrivada.classList.toggle("hidden", !isAuthenticated);
+
+  if (isAuthenticated) {
+    sessionStatus.textContent = currentSession.user.email;
+    setStatus("");
+  } else {
+    sessionStatus.textContent = "-";
+    setStatus("Inicia sesion para usar la app.");
+    renderTable([]);
+  }
 }
 
 function renderTable(records) {
   if (records.length === 0) {
-    tabla.innerHTML = `<tr class="empty"><td colspan="3">Aún no hay registros.</td></tr>`;
+    tabla.innerHTML = '<tr class="empty"><td colspan="3">Aun no hay registros.</td></tr>';
     contador.textContent = "0 registros";
     return;
   }
 
-  const sorted = records.slice().sort((a, b) => new Date(b.ts) - new Date(a.ts));
-  const rows = sorted
+  const rows = records
     .map(
       (r) => `
-        <tr>
-          <td>${formatDate(r.ts)}</td>
-          <td>${r.weight.toFixed(1)}</td>
-          <td><button class="ghost" data-id="${r.id}">Eliminar</button></td>
-        </tr>
-      `
+      <tr>
+        <td>${formatDate(r.ts)}</td>
+        <td>${Number(r.weight).toFixed(1)}</td>
+        <td><button class="ghost" data-id="${r.id}">Eliminar</button></td>
+      </tr>
+    `
     )
     .join("");
 
@@ -111,298 +184,355 @@ function renderTable(records) {
   contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
 }
 
-function setAuthUI(session) {
-  const loggedIn = Boolean(session && session.user);
-  loginBtn.classList.toggle("hidden", loggedIn);
-  logoutBtn.classList.toggle("hidden", !loggedIn);
-  emailInput.disabled = loggedIn;
-  passwordInput.disabled = loggedIn;
-  sessionStatus.textContent = loggedIn ? session.user.email : "sin sesión";
-}
+async function fetchRecords() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
 
-async function ensureSession() {
-  if (!supabase) {
-    setAuthUI(null);
-    return null;
-  }
-  const { data } = await supabase.auth.getSession();
-  setAuthUI(data.session);
-  return data.session;
-}
-
-function setCloudActionsEnabled(enabled) {
-  guardarBtn.disabled = !enabled;
-  exportarBtn.disabled = !enabled;
-  importarInput.disabled = !enabled;
-  limpiarBtn.disabled = !enabled;
-}
-
-async function refreshRecords() {
-  const records = await loadRecords();
-  renderTable(records);
-}
-
-async function addRecord(weight) {
-  if (!supabase) return;
-  const user = await getCurrentUser();
-  if (!user) {
-    setMessage("Inicia sesión para guardar.");
-    return;
-  }
-
-  const { error } = await supabase.from("weights").insert({
-    user_id: user.id,
-    ts: nowISO(),
-    weight,
+  const params = new URLSearchParams({
+    select: "id,ts,weight",
+    user_id: `eq.${currentSession.user.id}`,
+    order: "ts.desc",
   });
 
-  if (error) {
-    showError("No se pudo guardar el registro", error);
-    return;
-  }
-
-  await refreshRecords();
+  return apiFetch(`${SUPABASE_URL}/rest/v1/weights?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
 }
 
-async function deleteRecord(id) {
-  if (!supabase) return;
-  const user = await getCurrentUser();
-  if (!user) {
-    setMessage("Inicia sesión para eliminar.");
-    return;
-  }
-
-  const { error } = await supabase
-    .from("weights")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    showError("No se pudo eliminar el registro", error);
-    return;
-  }
-
-  await refreshRecords();
-}
-
-async function exportCSV() {
-  const records = await loadRecords();
-  if (records.length === 0) {
-    setMessage("No hay registros para exportar.");
-    return;
-  }
-
-  const header = "timestamp,weight";
-  const lines = records.map((r) => `${r.ts},${r.weight}`);
-  const csv = [header, ...lines].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `peso-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  setMessage("CSV exportado.");
+async function refreshAndRender() {
+  const records = await fetchRecords();
+  renderTable(records);
 }
 
 function parseCSV(text) {
   const lines = text
     .split(/\r?\n/)
-    .map((l) => l.trim())
+    .map((line) => line.trim())
     .filter(Boolean);
 
   if (lines.length === 0) return [];
 
-  let start = 0;
-  if (lines[0].toLowerCase().includes("timestamp")) {
-    start = 1;
-  }
+  const hasHeader = lines[0].toLowerCase().includes("timestamp");
+  const startIndex = hasHeader ? 1 : 0;
 
   const records = [];
-  for (let i = start; i < lines.length; i += 1) {
-    const [tsRaw, weightRaw] = lines[i].split(",");
-    const ts = tsRaw ? tsRaw.trim() : "";
+  for (let i = startIndex; i < lines.length; i += 1) {
+    const [timestamp, weightRaw] = lines[i].split(",");
+    const ts = timestamp ? timestamp.trim() : "";
     const weight = Number(weightRaw);
     if (!ts || Number.isNaN(weight)) continue;
 
     const date = new Date(ts);
     if (Number.isNaN(date.getTime())) continue;
 
-    records.push({ ts: date.toISOString(), weight });
+    records.push({ ts: date.toISOString(), weight: Number(weight.toFixed(1)) });
   }
 
   return records;
 }
 
-async function init() {
-  updateNow();
-  setInterval(updateNow, 1000);
-
-  if (!supabase) {
-    setCloudActionsEnabled(false);
-    sessionStatus.textContent = "error de conexión";
-    setMessage("No se pudo cargar Supabase. Recarga la página.");
-    renderTable([]);
-    return;
-  }
-
-  supabase.auth.onAuthStateChange(async (_event, session) => {
-    setAuthUI(session);
-    if (session) {
-      setCloudActionsEnabled(true);
-      await refreshRecords();
-    } else {
-      setCloudActionsEnabled(false);
-      renderTable([]);
-    }
-  });
-
-  const session = await ensureSession();
-  setCloudActionsEnabled(Boolean(session));
-  if (session) {
-    await refreshRecords();
-  } else {
-    renderTable([]);
-  }
-}
-
-window.addEventListener("error", (event) => {
-  const detail = event && event.message ? event.message : "error no identificado";
-  setMessage(`Error de la app: ${detail}`);
-});
-
-init().catch((error) => {
-  showError("Error al iniciar la app", error);
-});
-
-guardarBtn.addEventListener("click", async () => {
-  const value = Number(pesoInput.value);
-  if (Number.isNaN(value) || value <= 0) {
-    setMessage("Ingresa un peso válido.");
-    return;
-  }
-
-  const session = await ensureSession();
-  if (!session) {
-    setMessage("Inicia sesión para guardar.");
-    return;
-  }
-
-  await addRecord(Number(value.toFixed(1)));
-  pesoInput.value = "";
-  setMessage("Registro guardado.");
-});
-
-pesoInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") guardarBtn.click();
-});
-
-tabla.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-id]");
-  if (!button) return;
-
-  const id = button.dataset.id;
-  if (!id) return;
-
-  await deleteRecord(id);
-  setMessage("Registro eliminado.");
-});
-
-exportarBtn.addEventListener("click", async () => {
-  const session = await ensureSession();
-  if (!session) {
-    setMessage("Inicia sesión para exportar.");
-    return;
-  }
-  await exportCSV();
-});
-
-importarInput.addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const text = await file.text();
-  const imported = parseCSV(text);
-  if (imported.length === 0) {
-    setMessage("No se encontraron registros válidos en el CSV.");
-    return;
-  }
-
-  const user = await getCurrentUser();
-  if (!user) {
-    setMessage("Inicia sesión para importar.");
-    return;
-  }
-
-  const rows = imported.map((r) => ({
-    user_id: user.id,
-    ts: r.ts,
-    weight: r.weight,
-  }));
-
-  const { error } = await supabase.from("weights").insert(rows);
-  if (error) {
-    showError("No se pudo importar el CSV", error);
-    return;
-  }
-
-  await refreshRecords();
-  setMessage(`Importados ${imported.length} registros.`);
-  importarInput.value = "";
-});
-
-limpiarBtn.addEventListener("click", async () => {
-  if (!confirm("¿Seguro que quieres borrar todos los registros?")) return;
-
-  const user = await getCurrentUser();
-  if (!user) {
-    setMessage("Inicia sesión para borrar.");
-    return;
-  }
-
-  const { error } = await supabase.from("weights").delete().eq("user_id", user.id);
-  if (error) {
-    showError("No se pudo borrar", error);
-    return;
-  }
-
-  renderTable([]);
-  setMessage("Registros borrados.");
-});
-
-loginBtn.addEventListener("click", async (event) => {
-  event.preventDefault();
-  if (!supabase) {
-    setMessage("Supabase no está disponible en este momento.");
-    return;
-  }
-
+async function handleLogin() {
   const email = emailInput.value.trim();
   const password = passwordInput.value.trim();
+
   if (!email || !password) {
     setMessage("Ingresa email y clave.");
     return;
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    showError("No se pudo iniciar sesión", error);
+  loginBtn.disabled = true;
+  setStatus("Iniciando sesion...");
+
+  try {
+    const data = await apiFetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    currentSession = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: data.expires_at,
+      user: data.user,
+    };
+
+    saveSession(currentSession);
+    setAuthenticatedUI(true);
+    await refreshAndRender();
+    setMessage("Sesion iniciada.");
+  } catch (error) {
+    setStatus("No se pudo iniciar sesion.");
+    setMessage(`Login fallido: ${error.message}`);
+  } finally {
+    loginBtn.disabled = false;
+  }
+}
+
+async function handleLogout() {
+  try {
+    if (currentSession && currentSession.access_token) {
+      await apiFetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${currentSession.access_token}`,
+        },
+      });
+    }
+  } catch {
+    // Ignore remote logout errors; local logout still succeeds.
+  }
+
+  clearSession();
+  setAuthenticatedUI(false);
+  setMessage("Sesion cerrada.");
+}
+
+async function handleAddRecord() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) {
+    setAuthenticatedUI(false);
+    setMessage("Inicia sesion para guardar.");
     return;
   }
 
-  const session = await ensureSession();
-  if (session) {
-    await refreshRecords();
-    setMessage("Sesión iniciada.");
+  const value = Number(pesoInput.value);
+  if (Number.isNaN(value) || value <= 0) {
+    setMessage("Ingresa un peso valido.");
+    return;
   }
-});
 
-logoutBtn.addEventListener("click", async () => {
-  if (!supabase) return;
-  await supabase.auth.signOut();
-  setAuthUI(null);
-  setCloudActionsEnabled(false);
-  renderTable([]);
-  setMessage("Sesión cerrada.");
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/weights`, {
+      method: "POST",
+      headers: {
+        ...authHeaders(),
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify([
+        {
+          user_id: currentSession.user.id,
+          ts: nowISO(),
+          weight: Number(value.toFixed(1)),
+        },
+      ]),
+    });
+
+    pesoInput.value = "";
+    await refreshAndRender();
+    setMessage("Registro guardado.");
+  } catch (error) {
+    setMessage(`No se pudo guardar: ${error.message}`);
+  }
+}
+
+async function handleDeleteRecord(id) {
+  await refreshSessionIfNeeded();
+  if (!currentSession) {
+    setAuthenticatedUI(false);
+    return;
+  }
+
+  const params = new URLSearchParams({
+    id: `eq.${id}`,
+    user_id: `eq.${currentSession.user.id}`,
+  });
+
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/weights?${params.toString()}`, {
+      method: "DELETE",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${currentSession.access_token}`,
+      },
+    });
+
+    await refreshAndRender();
+    setMessage("Registro eliminado.");
+  } catch (error) {
+    setMessage(`No se pudo eliminar: ${error.message}`);
+  }
+}
+
+async function handleExport() {
+  try {
+    const records = await fetchRecords();
+    if (records.length === 0) {
+      setMessage("No hay registros para exportar.");
+      return;
+    }
+
+    const csv = ["timestamp,weight", ...records.map((r) => `${r.ts},${r.weight}`)].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `peso-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage("CSV exportado.");
+  } catch (error) {
+    setMessage(`No se pudo exportar: ${error.message}`);
+  }
+}
+
+async function handleImport(file) {
+  try {
+    const text = await file.text();
+    const parsed = parseCSV(text);
+    if (parsed.length === 0) {
+      setMessage("No se encontraron registros validos en el CSV.");
+      return;
+    }
+
+    await refreshSessionIfNeeded();
+    if (!currentSession) {
+      setAuthenticatedUI(false);
+      setMessage("Inicia sesion para importar.");
+      return;
+    }
+
+    const rows = parsed.map((r) => ({
+      user_id: currentSession.user.id,
+      ts: r.ts,
+      weight: r.weight,
+    }));
+
+    await apiFetch(`${SUPABASE_URL}/rest/v1/weights`, {
+      method: "POST",
+      headers: {
+        ...authHeaders(),
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(rows),
+    });
+
+    await refreshAndRender();
+    setMessage(`Importados ${rows.length} registros.`);
+  } catch (error) {
+    setMessage(`No se pudo importar: ${error.message}`);
+  } finally {
+    importarInput.value = "";
+  }
+}
+
+async function handleClearAll() {
+  if (!confirm("Seguro que quieres borrar todos los registros?")) return;
+
+  await refreshSessionIfNeeded();
+  if (!currentSession) {
+    setAuthenticatedUI(false);
+    return;
+  }
+
+  const params = new URLSearchParams({
+    user_id: `eq.${currentSession.user.id}`,
+  });
+
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/weights?${params.toString()}`, {
+      method: "DELETE",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${currentSession.access_token}`,
+      },
+    });
+
+    renderTable([]);
+    setMessage("Registros borrados.");
+  } catch (error) {
+    setMessage(`No se pudo borrar: ${error.message}`);
+  }
+}
+
+function bindEvents() {
+  loginBtn.addEventListener("click", async (event) => {
+    event.preventDefault();
+    await handleLogin();
+  });
+
+  passwordInput.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      await handleLogin();
+    }
+  });
+
+  logoutBtn.addEventListener("click", async () => {
+    await handleLogout();
+  });
+
+  guardarBtn.addEventListener("click", async () => {
+    await handleAddRecord();
+  });
+
+  pesoInput.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      await handleAddRecord();
+    }
+  });
+
+  tabla.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-id]");
+    if (!button) return;
+    const id = button.dataset.id;
+    if (!id) return;
+    await handleDeleteRecord(id);
+  });
+
+  exportarBtn.addEventListener("click", async () => {
+    await handleExport();
+  });
+
+  importarInput.addEventListener("change", async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    await handleImport(file);
+  });
+
+  limpiarBtn.addEventListener("click", async () => {
+    await handleClearAll();
+  });
+
+  window.addEventListener("error", (event) => {
+    const detail = event && event.message ? event.message : "Error de JavaScript.";
+    setStatus(detail);
+  });
+}
+
+async function init() {
+  updateNow();
+  setInterval(updateNow, 1000);
+  bindEvents();
+
+  if (!currentSession) {
+    setAuthenticatedUI(false);
+    return;
+  }
+
+  await refreshSessionIfNeeded();
+  if (!currentSession) {
+    setAuthenticatedUI(false);
+    return;
+  }
+
+  setAuthenticatedUI(true);
+  try {
+    await refreshAndRender();
+  } catch (error) {
+    setStatus(`Error al cargar datos: ${error.message}`);
+  }
+}
+
+init().catch((error) => {
+  setStatus(`Error al iniciar: ${error.message}`);
 });

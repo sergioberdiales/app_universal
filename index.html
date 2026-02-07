@@ -18,89 +18,97 @@
       <header class="hero">
         <p class="kicker">Simple · Privado · Local</p>
         <h1>Registro de Peso</h1>
-        <p class="subtitle">Guarda tus mediciones en este navegador. Exporta o importa CSV cuando quieras.</p>
+        <p class="subtitle">Guarda tus mediciones en la nube y exporta o importa CSV cuando quieras.</p>
       </header>
 
-      <section class="card">
+      <div id="estadoApp" class="status-banner"></div>
+
+      <section class="card" id="loginCard">
         <div class="auth" id="authBox">
           <div class="auth-info">
             <h2>Acceso</h2>
-            <p class="subtitle">Ingresa con tu usuario único para sincronizar en la nube.</p>
+            <p class="subtitle">Inicia sesión para ver y guardar tus datos.</p>
           </div>
           <div class="auth-form">
             <div class="field">
               <label for="email">Email</label>
-              <input id="email" type="email" placeholder="tu@email.com" />
+              <input id="email" type="email" placeholder="tu@email.com" autocomplete="username" />
             </div>
             <div class="field">
               <label for="password">Clave</label>
-              <input id="password" type="password" placeholder="••••••••" />
+              <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
             </div>
             <button id="login" class="primary">Entrar</button>
-            <button id="logout" class="ghost hidden">Salir</button>
           </div>
         </div>
-        <p class="hint">Sesión activa: <span id="sessionStatus">—</span></p>
       </section>
 
-      <section class="card">
-        <div class="form-row">
-          <div class="field">
-            <label for="peso">Peso (kg)</label>
-            <input id="peso" type="number" inputmode="decimal" step="0.1" min="0" placeholder="Ej: 72.4" />
-          </div>
-          <div class="field">
-            <label>Fecha y hora</label>
-            <div class="readonly" id="fechaActual">—</div>
-          </div>
-          <button id="guardar" class="primary">Registrar</button>
-        </div>
-        <p class="hint">La fecha y hora se guarda automáticamente al momento de registrar.</p>
-      </section>
-
-      <section class="card">
+      <section class="card hidden" id="sessionCard">
         <div class="tools">
-          <div class="tool-group">
-            <button id="exportar" class="secondary">Exportar CSV</button>
-            <label class="file-btn" for="importar">
-              Importar CSV
-              <input id="importar" type="file" accept=".csv,text/csv" />
-            </label>
-          </div>
-          <div class="tool-group">
-            <button id="limpiar" class="ghost">Borrar todo</button>
-          </div>
+          <p class="subtitle">Sesión activa: <strong id="sessionStatus">—</strong></p>
+          <button id="logout" class="ghost">Salir</button>
         </div>
-        <p class="hint">El CSV usa el formato: <span class="mono">timestamp,weight</span> (timestamp en ISO 8601).</p>
       </section>
 
-      <section class="card table-card">
-        <div class="table-header">
-          <h2>Historial</h2>
-          <span id="contador" class="chip">0 registros</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha y hora</th>
-                <th>Peso (kg)</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="tabla">
-              <tr class="empty">
-                <td colspan="3">Aún no hay registros.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <div id="zonaPrivada" class="hidden">
+        <section class="card">
+          <div class="form-row">
+            <div class="field">
+              <label for="peso">Peso (kg)</label>
+              <input id="peso" type="number" inputmode="decimal" step="0.1" min="0" placeholder="Ej: 72.4" />
+            </div>
+            <div class="field">
+              <label>Fecha y hora</label>
+              <div class="readonly" id="fechaActual">—</div>
+            </div>
+            <button id="guardar" class="primary">Registrar</button>
+          </div>
+          <p class="hint">La fecha y hora se guarda automáticamente al momento de registrar.</p>
+        </section>
+
+        <section class="card">
+          <div class="tools">
+            <div class="tool-group">
+              <button id="exportar" class="secondary">Exportar CSV</button>
+              <label class="file-btn" for="importar">
+                Importar CSV
+                <input id="importar" type="file" accept=".csv,text/csv" />
+              </label>
+            </div>
+            <div class="tool-group">
+              <button id="limpiar" class="ghost">Borrar todo</button>
+            </div>
+          </div>
+          <p class="hint">El CSV usa el formato: <span class="mono">timestamp,weight</span> (timestamp en ISO 8601).</p>
+        </section>
+
+        <section class="card table-card">
+          <div class="table-header">
+            <h2>Historial</h2>
+            <span id="contador" class="chip">0 registros</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha y hora</th>
+                  <th>Peso (kg)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tabla">
+                <tr class="empty">
+                  <td colspan="3">Aún no hay registros.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
 
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

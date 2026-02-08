@@ -17,8 +17,8 @@
     <main class="app">
       <header class="hero">
         <p class="kicker">Simple · Privado · Local</p>
-        <h1>Registro de Peso</h1>
-        <p class="subtitle">Guarda tus mediciones en la nube y exporta o importa CSV cuando quieras.</p>
+        <h1>Registro Personal</h1>
+        <p class="subtitle">Registra tu peso y tus habitos diarios en la nube con el minimo de friccion.</p>
       </header>
 
       <div id="estadoApp" class="status-banner"></div>
@@ -104,11 +104,52 @@
             </table>
           </div>
         </section>
+
+        <section class="card">
+          <div class="table-header">
+            <h2>Habitos</h2>
+            <span id="habitCounter" class="chip">0 habitos</span>
+          </div>
+          <div class="habit-form">
+            <div class="field">
+              <label for="habitName">Nuevo habito</label>
+              <input id="habitName" type="text" placeholder="Ej: Ejercicios de fuerza" />
+            </div>
+            <div class="field">
+              <label for="habitDescription">Descripcion (opcional)</label>
+              <input id="habitDescription" type="text" placeholder="Ej: 20-30 min al final del dia" />
+            </div>
+            <button id="createHabit" class="primary">Crear habito</button>
+          </div>
+          <div class="tools habit-tools">
+            <label class="field habit-date-field" for="habitDate">
+              <span>Fecha de seguimiento</span>
+              <input id="habitDate" type="date" />
+            </label>
+            <p id="habitSummary" class="hint">Sin registro diario aun.</p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Habito</th>
+                  <th>Seguimiento diario</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="habitsTable">
+                <tr class="empty">
+                  <td colspan="3">Aun no hay habitos creados.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=dcea1c6"></script>
+    <script src="app.js?v=habits-20260208"></script>
   </body>
 </html>

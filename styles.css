@@ -91,7 +91,9 @@ label {
 
 input[type="number"],
 input[type="email"],
-input[type="password"] {
+input[type="password"],
+input[type="text"],
+input[type="date"] {
   border: 1px solid var(--stroke);
   border-radius: 12px;
   padding: 12px 14px;
@@ -265,6 +267,63 @@ td {
   font-size: 0.95rem;
 }
 
+.habit-form {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.habit-tools {
+  margin-top: 16px;
+  align-items: end;
+}
+
+.habit-date-field {
+  width: 220px;
+}
+
+.habit-checks {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.habit-btn {
+  background: #fff;
+  color: var(--muted);
+  border: 1px solid var(--stroke);
+  box-shadow: none;
+}
+
+.habit-btn.is-active {
+  background: #f4f3ff;
+  border-color: #d8d0ee;
+}
+
+.habit-btn.yes.is-active {
+  background: var(--accent-2);
+  color: #fff;
+  border-color: var(--accent-2);
+}
+
+.habit-btn.no.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.habit-name {
+  font-weight: 600;
+}
+
+.habit-description {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -279,6 +338,14 @@ td {
 @media (max-width: 760px) {
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .habit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .habit-date-field {
+    width: 100%;
   }
 
   button,

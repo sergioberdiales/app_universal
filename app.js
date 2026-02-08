@@ -7,6 +7,13 @@ const loginCard = document.getElementById("loginCard");
 const sessionCard = document.getElementById("sessionCard");
 const zonaPrivada = document.getElementById("zonaPrivada");
 const estadoApp = document.getElementById("estadoApp");
+const mensaje = document.getElementById("mensaje");
+
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const loginBtn = document.getElementById("login");
+const logoutBtn = document.getElementById("logout");
+const sessionStatus = document.getElementById("sessionStatus");
 
 const pesoInput = document.getElementById("peso");
 const fechaActual = document.getElementById("fechaActual");
@@ -16,15 +23,31 @@ const contador = document.getElementById("contador");
 const exportarBtn = document.getElementById("exportar");
 const importarInput = document.getElementById("importar");
 const limpiarBtn = document.getElementById("limpiar");
-const mensaje = document.getElementById("mensaje");
 
-const emailInput = document.getElementById("email");
-const passwordInput = document.getElementById("password");
-const loginBtn = document.getElementById("login");
-const logoutBtn = document.getElementById("logout");
-const sessionStatus = document.getElementById("sessionStatus");
+const habitNameInput = document.getElementById("habitName");
+const habitDescriptionInput = document.getElementById("habitDescription");
+const createHabitBtn = document.getElementById("createHabit");
+const habitDateInput = document.getElementById("habitDate");
+const habitsTable = document.getElementById("habitsTable");
+const habitCounter = document.getElementById("habitCounter");
+const habitSummary = document.getElementById("habitSummary");
 
 let currentSession = loadSession();
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function todayLocalDateString() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
+function getSelectedHabitDate() {
+  const date = habitDateInput.value || todayLocalDateString();
+  habitDateInput.value = date;
+  return date;
+}
 
 function nowISO() {
   return new Date().toISOString();
@@ -33,11 +56,9 @@ function nowISO() {
 function formatDate(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "fecha invalida";
-
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()} ${pad2(
     date.getHours()
-  )}:${pad(date.getMinutes())}`;
+  )}:${pad2(date.getMinutes())}`;
 }
 
 function updateNow() {
@@ -87,6 +108,7 @@ function isSessionExpired(session) {
 async function readJsonSafe(response) {
   const text = await response.text();
   if (!text) return {};
+
   try {
     return JSON.parse(text);
   } catch {
@@ -138,12 +160,111 @@ async function refreshSessionIfNeeded() {
   }
 }
 
-function authHeaders() {
+async function ensureAuthenticated(messageIfNot = "Inicia sesion para continuar.") {
+  await refreshSessionIfNeeded();
+  if (currentSession) return true;
+
+  setAuthenticatedUI(false);
+  setMessage(messageIfNot);
+  return false;
+}
+
+function authHeaders(extra = {}) {
   return {
     apikey: SUPABASE_ANON_KEY,
     Authorization: `Bearer ${currentSession.access_token}`,
     "Content-Type": "application/json",
+    ...extra,
   };
+}
+
+function renderWeightTable(records) {
+  if (records.length === 0) {
+    tabla.innerHTML = '<tr class="empty"><td colspan="3">Aun no hay registros.</td></tr>';
+    contador.textContent = "0 registros";
+    return;
+  }
+
+  const rows = records
+    .map(
+      (item) => `
+      <tr>
+        <td>${formatDate(item.ts)}</td>
+        <td>${Number(item.weight).toFixed(1)}</td>
+        <td><button class="ghost" data-id="${item.id}">Eliminar</button></td>
+      </tr>
+    `
+    )
+    .join("");
+
+  tabla.innerHTML = rows;
+  contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
+}
+
+function statusToLabel(value) {
+  if (value === 1) return "Si";
+  if (value === 0) return "No";
+  return "Sin registro";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderHabitTable(habits, checksByHabit, date) {
+  if (habits.length === 0) {
+    habitsTable.innerHTML = '<tr class="empty"><td colspan="3">Aun no hay habitos creados.</td></tr>';
+    habitCounter.textContent = "0 habitos";
+    habitSummary.textContent = "Crea tu primer habito para empezar.";
+    return;
+  }
+
+  let yesCount = 0;
+  let noCount = 0;
+  let noLogCount = 0;
+
+  const rows = habits
+    .map((habit) => {
+      const status = checksByHabit.has(habit.id) ? checksByHabit.get(habit.id) : null;
+      if (status === 1) yesCount += 1;
+      if (status === 0) noCount += 1;
+      if (status === null) noLogCount += 1;
+
+      const yesActive = status === 1 ? "is-active" : "";
+      const noActive = status === 0 ? "is-active" : "";
+      const clearActive = status === null ? "is-active" : "";
+
+      const description = habit.description
+        ? `<div class="habit-description">${escapeHtml(habit.description)}</div>`
+        : "";
+
+      return `
+        <tr>
+          <td>
+            <div class="habit-name">${escapeHtml(habit.name)}</div>
+            ${description}
+          </td>
+          <td>
+            <div class="habit-checks">
+              <button class="habit-btn yes ${yesActive}" data-habit-id="${habit.id}" data-status="1">Si</button>
+              <button class="habit-btn no ${noActive}" data-habit-id="${habit.id}" data-status="0">No</button>
+              <button class="habit-btn ${clearActive}" data-clear-habit-id="${habit.id}">Sin registro</button>
+            </div>
+          </td>
+          <td>${statusToLabel(status)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  habitsTable.innerHTML = rows;
+  habitCounter.textContent = `${habits.length} habito${habits.length === 1 ? "" : "s"}`;
+  habitSummary.textContent = `${date}: ${yesCount} si, ${noCount} no, ${noLogCount} sin registro.`;
 }
 
 function setAuthenticatedUI(isAuthenticated) {
@@ -154,37 +275,16 @@ function setAuthenticatedUI(isAuthenticated) {
   if (isAuthenticated) {
     sessionStatus.textContent = currentSession.user.email;
     setStatus("");
-  } else {
-    sessionStatus.textContent = "-";
-    setStatus("Inicia sesion para usar la app.");
-    renderTable([]);
-  }
-}
-
-function renderTable(records) {
-  if (records.length === 0) {
-    tabla.innerHTML = '<tr class="empty"><td colspan="3">Aun no hay registros.</td></tr>';
-    contador.textContent = "0 registros";
     return;
   }
 
-  const rows = records
-    .map(
-      (r) => `
-      <tr>
-        <td>${formatDate(r.ts)}</td>
-        <td>${Number(r.weight).toFixed(1)}</td>
-        <td><button class="ghost" data-id="${r.id}">Eliminar</button></td>
-      </tr>
-    `
-    )
-    .join("");
-
-  tabla.innerHTML = rows;
-  contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
+  sessionStatus.textContent = "-";
+  setStatus("Inicia sesion para usar la app.");
+  renderWeightTable([]);
+  renderHabitTable([], new Map(), getSelectedHabitDate());
 }
 
-async function fetchRecords() {
+async function fetchWeightRecords() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
@@ -203,9 +303,89 @@ async function fetchRecords() {
   });
 }
 
-async function refreshAndRender() {
-  const records = await fetchRecords();
-  renderTable(records);
+async function fetchHabits() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = new URLSearchParams({
+    select: "id,name,description,is_active,created_at",
+    user_id: `eq.${currentSession.user.id}`,
+    is_active: "eq.true",
+    order: "created_at.asc",
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/habits?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
+async function fetchHabitChecks(logDate) {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = new URLSearchParams({
+    select: "habit_id,status,log_date",
+    user_id: `eq.${currentSession.user.id}`,
+    log_date: `eq.${logDate}`,
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
+async function refreshWeights() {
+  const weights = await fetchWeightRecords();
+  renderWeightTable(weights);
+}
+
+async function refreshHabits() {
+  const logDate = getSelectedHabitDate();
+  const [habits, checks] = await Promise.all([fetchHabits(), fetchHabitChecks(logDate)]);
+
+  const checksByHabit = new Map();
+  for (const check of checks) {
+    checksByHabit.set(Number(check.habit_id), Number(check.status));
+  }
+
+  renderHabitTable(habits, checksByHabit, logDate);
+}
+
+async function refreshAllData() {
+  const [weightsResult, habitsResult] = await Promise.allSettled([refreshWeights(), refreshHabits()]);
+
+  if (weightsResult.status === "rejected") {
+    setStatus(`Error en peso: ${weightsResult.reason.message}`);
+  }
+
+  if (habitsResult.status === "rejected") {
+    const detail = habitsResult.reason.message || "error desconocido";
+    const missingTables =
+      detail.includes('relation \"habits\" does not exist') ||
+      detail.includes('relation \"habit_checks\" does not exist');
+
+    if (missingTables) {
+      setStatus("Falta crear tablas de habitos en Supabase. Ejecuta supabase_habits.sql.");
+      habitSummary.textContent = "Pendiente: ejecutar SQL de habitos en Supabase.";
+      habitsTable.innerHTML =
+        '<tr class="empty"><td colspan="3">Habitos no disponible hasta crear tablas.</td></tr>';
+      habitCounter.textContent = "0 habitos";
+    } else {
+      setStatus(`Error en habitos: ${detail}`);
+    }
+  }
+
+  if (weightsResult.status === "fulfilled" && habitsResult.status === "fulfilled") {
+    setStatus("");
+  }
 }
 
 function parseCSV(text) {
@@ -266,7 +446,7 @@ async function handleLogin() {
 
     saveSession(currentSession);
     setAuthenticatedUI(true);
-    await refreshAndRender();
+    await refreshAllData();
     setMessage("Sesion iniciada.");
   } catch (error) {
     setStatus("No se pudo iniciar sesion.");
@@ -288,7 +468,7 @@ async function handleLogout() {
       });
     }
   } catch {
-    // Ignore remote logout errors; local logout still succeeds.
+    // If remote logout fails, local logout still continues.
   }
 
   clearSession();
@@ -296,13 +476,9 @@ async function handleLogout() {
   setMessage("Sesion cerrada.");
 }
 
-async function handleAddRecord() {
-  await refreshSessionIfNeeded();
-  if (!currentSession) {
-    setAuthenticatedUI(false);
-    setMessage("Inicia sesion para guardar.");
-    return;
-  }
+async function handleAddWeight() {
+  const ok = await ensureAuthenticated("Inicia sesion para guardar peso.");
+  if (!ok) return;
 
   const value = Number(pesoInput.value);
   if (Number.isNaN(value) || value <= 0) {
@@ -313,10 +489,7 @@ async function handleAddRecord() {
   try {
     await apiFetch(`${SUPABASE_URL}/rest/v1/weights`, {
       method: "POST",
-      headers: {
-        ...authHeaders(),
-        Prefer: "return=minimal",
-      },
+      headers: authHeaders({ Prefer: "return=minimal" }),
       body: JSON.stringify([
         {
           user_id: currentSession.user.id,
@@ -327,19 +500,16 @@ async function handleAddRecord() {
     });
 
     pesoInput.value = "";
-    await refreshAndRender();
-    setMessage("Registro guardado.");
+    await refreshWeights();
+    setMessage("Registro de peso guardado.");
   } catch (error) {
-    setMessage(`No se pudo guardar: ${error.message}`);
+    setMessage(`No se pudo guardar el peso: ${error.message}`);
   }
 }
 
-async function handleDeleteRecord(id) {
-  await refreshSessionIfNeeded();
-  if (!currentSession) {
-    setAuthenticatedUI(false);
-    return;
-  }
+async function handleDeleteWeight(id) {
+  const ok = await ensureAuthenticated();
+  if (!ok) return;
 
   const params = new URLSearchParams({
     id: `eq.${id}`,
@@ -355,27 +525,30 @@ async function handleDeleteRecord(id) {
       },
     });
 
-    await refreshAndRender();
+    await refreshWeights();
     setMessage("Registro eliminado.");
   } catch (error) {
     setMessage(`No se pudo eliminar: ${error.message}`);
   }
 }
 
-async function handleExport() {
+async function handleExportWeights() {
+  const ok = await ensureAuthenticated("Inicia sesion para exportar.");
+  if (!ok) return;
+
   try {
-    const records = await fetchRecords();
+    const records = await fetchWeightRecords();
     if (records.length === 0) {
       setMessage("No hay registros para exportar.");
       return;
     }
 
-    const csv = ["timestamp,weight", ...records.map((r) => `${r.ts},${r.weight}`)].join("\n");
+    const csv = ["timestamp,weight", ...records.map((row) => `${row.ts},${row.weight}`)].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `peso-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `peso-${todayLocalDateString()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setMessage("CSV exportado.");
@@ -384,7 +557,10 @@ async function handleExport() {
   }
 }
 
-async function handleImport(file) {
+async function handleImportWeights(file) {
+  const ok = await ensureAuthenticated("Inicia sesion para importar.");
+  if (!ok) return;
+
   try {
     const text = await file.text();
     const parsed = parseCSV(text);
@@ -393,30 +569,20 @@ async function handleImport(file) {
       return;
     }
 
-    await refreshSessionIfNeeded();
-    if (!currentSession) {
-      setAuthenticatedUI(false);
-      setMessage("Inicia sesion para importar.");
-      return;
-    }
-
-    const rows = parsed.map((r) => ({
+    const rows = parsed.map((row) => ({
       user_id: currentSession.user.id,
-      ts: r.ts,
-      weight: r.weight,
+      ts: row.ts,
+      weight: row.weight,
     }));
 
     await apiFetch(`${SUPABASE_URL}/rest/v1/weights`, {
       method: "POST",
-      headers: {
-        ...authHeaders(),
-        Prefer: "return=minimal",
-      },
+      headers: authHeaders({ Prefer: "return=minimal" }),
       body: JSON.stringify(rows),
     });
 
-    await refreshAndRender();
-    setMessage(`Importados ${rows.length} registros.`);
+    await refreshWeights();
+    setMessage(`Importados ${rows.length} registros de peso.`);
   } catch (error) {
     setMessage(`No se pudo importar: ${error.message}`);
   } finally {
@@ -424,14 +590,10 @@ async function handleImport(file) {
   }
 }
 
-async function handleClearAll() {
-  if (!confirm("Seguro que quieres borrar todos los registros?")) return;
-
-  await refreshSessionIfNeeded();
-  if (!currentSession) {
-    setAuthenticatedUI(false);
-    return;
-  }
+async function handleClearWeights() {
+  const ok = await ensureAuthenticated("Inicia sesion para borrar.");
+  if (!ok) return;
+  if (!confirm("Seguro que quieres borrar todos los registros de peso?")) return;
 
   const params = new URLSearchParams({
     user_id: `eq.${currentSession.user.id}`,
@@ -446,10 +608,105 @@ async function handleClearAll() {
       },
     });
 
-    renderTable([]);
-    setMessage("Registros borrados.");
+    renderWeightTable([]);
+    setMessage("Registros de peso borrados.");
   } catch (error) {
     setMessage(`No se pudo borrar: ${error.message}`);
+  }
+}
+
+async function handleCreateHabit() {
+  const ok = await ensureAuthenticated("Inicia sesion para crear habitos.");
+  if (!ok) return;
+
+  const name = habitNameInput.value.trim();
+  const description = habitDescriptionInput.value.trim();
+  if (!name) {
+    setMessage("El nombre del habito es obligatorio.");
+    return;
+  }
+
+  createHabitBtn.disabled = true;
+
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/habits`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify([
+        {
+          user_id: currentSession.user.id,
+          name,
+          description: description || null,
+          is_active: true,
+        },
+      ]),
+    });
+
+    habitNameInput.value = "";
+    habitDescriptionInput.value = "";
+    await refreshHabits();
+    setMessage("Habito creado.");
+  } catch (error) {
+    setMessage(`No se pudo crear el habito: ${error.message}`);
+  } finally {
+    createHabitBtn.disabled = false;
+  }
+}
+
+async function upsertHabitStatus(habitId, status) {
+  const ok = await ensureAuthenticated("Inicia sesion para registrar habitos.");
+  if (!ok) return;
+
+  const logDate = getSelectedHabitDate();
+
+  try {
+    await apiFetch(
+      `${SUPABASE_URL}/rest/v1/habit_checks?on_conflict=user_id,habit_id,log_date`,
+      {
+        method: "POST",
+        headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
+        body: JSON.stringify([
+          {
+            user_id: currentSession.user.id,
+            habit_id: Number(habitId),
+            log_date: logDate,
+            status: Number(status),
+          },
+        ]),
+      }
+    );
+
+    await refreshHabits();
+    setMessage("Seguimiento actualizado.");
+  } catch (error) {
+    setMessage(`No se pudo guardar el seguimiento: ${error.message}`);
+  }
+}
+
+async function clearHabitStatus(habitId) {
+  const ok = await ensureAuthenticated("Inicia sesion para registrar habitos.");
+  if (!ok) return;
+
+  const logDate = getSelectedHabitDate();
+  const params = new URLSearchParams({
+    user_id: `eq.${currentSession.user.id}`,
+    habit_id: `eq.${habitId}`,
+    log_date: `eq.${logDate}`,
+  });
+
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
+      method: "DELETE",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${currentSession.access_token}`,
+      },
+    });
+
+    await refreshHabits();
+    setMessage("Seguimiento marcado como sin registro.");
+  } catch (error) {
+    setMessage(`No se pudo limpiar el seguimiento: ${error.message}`);
   }
 }
 
@@ -460,10 +717,9 @@ function bindEvents() {
   });
 
   passwordInput.addEventListener("keydown", async (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      await handleLogin();
-    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    await handleLogin();
   });
 
   logoutBtn.addEventListener("click", async () => {
@@ -471,14 +727,13 @@ function bindEvents() {
   });
 
   guardarBtn.addEventListener("click", async () => {
-    await handleAddRecord();
+    await handleAddWeight();
   });
 
   pesoInput.addEventListener("keydown", async (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      await handleAddRecord();
-    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    await handleAddWeight();
   });
 
   tabla.addEventListener("click", async (event) => {
@@ -486,21 +741,60 @@ function bindEvents() {
     if (!button) return;
     const id = button.dataset.id;
     if (!id) return;
-    await handleDeleteRecord(id);
+    await handleDeleteWeight(id);
   });
 
   exportarBtn.addEventListener("click", async () => {
-    await handleExport();
+    await handleExportWeights();
   });
 
   importarInput.addEventListener("change", async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
-    await handleImport(file);
+    await handleImportWeights(file);
   });
 
   limpiarBtn.addEventListener("click", async () => {
-    await handleClearAll();
+    await handleClearWeights();
+  });
+
+  createHabitBtn.addEventListener("click", async () => {
+    await handleCreateHabit();
+  });
+
+  habitNameInput.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    await handleCreateHabit();
+  });
+
+  habitDescriptionInput.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    await handleCreateHabit();
+  });
+
+  habitDateInput.addEventListener("change", async () => {
+    const ok = await ensureAuthenticated();
+    if (!ok) return;
+    try {
+      await refreshHabits();
+    } catch (error) {
+      setStatus(`Error en habitos: ${error.message}`);
+    }
+  });
+
+  habitsTable.addEventListener("click", async (event) => {
+    const statusBtn = event.target.closest("button[data-habit-id][data-status]");
+    if (statusBtn) {
+      await upsertHabitStatus(statusBtn.dataset.habitId, statusBtn.dataset.status);
+      return;
+    }
+
+    const clearBtn = event.target.closest("button[data-clear-habit-id]");
+    if (clearBtn) {
+      await clearHabitStatus(clearBtn.dataset.clearHabitId);
+    }
   });
 
   window.addEventListener("error", (event) => {
@@ -510,6 +804,7 @@ function bindEvents() {
 }
 
 async function init() {
+  habitDateInput.value = todayLocalDateString();
   updateNow();
   setInterval(updateNow, 1000);
   bindEvents();
@@ -527,7 +822,7 @@ async function init() {
 
   setAuthenticatedUI(true);
   try {
-    await refreshAndRender();
+    await refreshAllData();
   } catch (error) {
     setStatus(`Error al cargar datos: ${error.message}`);
   }

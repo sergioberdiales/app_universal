@@ -2,12 +2,23 @@ const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
 const SESSION_KEY = "peso_supabase_session_v1";
+const TAB_KEY = "registro_tab_v1";
+const TAB_IDS = ["todayPanel", "weightPanel", "historyPanel"];
 
 const loginCard = document.getElementById("loginCard");
-const sessionCard = document.getElementById("sessionCard");
 const zonaPrivada = document.getElementById("zonaPrivada");
 const estadoApp = document.getElementById("estadoApp");
 const mensaje = document.getElementById("mensaje");
+
+const mainTabs = document.getElementById("mainTabs");
+const todayPanel = document.getElementById("todayPanel");
+const weightPanel = document.getElementById("weightPanel");
+const historyPanel = document.getElementById("historyPanel");
+const panelMap = {
+  todayPanel,
+  weightPanel,
+  historyPanel,
+};
 
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
@@ -31,6 +42,7 @@ const habitDateInput = document.getElementById("habitDate");
 const habitsTable = document.getElementById("habitsTable");
 const habitCounter = document.getElementById("habitCounter");
 const habitSummary = document.getElementById("habitSummary");
+const newHabitDetails = document.getElementById("newHabitDetails");
 
 let currentSession = loadSession();
 
@@ -56,6 +68,7 @@ function nowISO() {
 function formatDate(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "fecha invalida";
+
   return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()} ${pad2(
     date.getHours()
   )}:${pad2(date.getMinutes())}`;
@@ -78,12 +91,23 @@ function setStatus(text) {
   estadoApp.textContent = text || "";
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function loadSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
+
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.access_token || !parsed.user || !parsed.user.id) return null;
+
     return parsed;
   } catch {
     return null;
@@ -103,6 +127,35 @@ function isSessionExpired(session) {
   if (!session || !session.expires_at) return true;
   const now = Math.floor(Date.now() / 1000);
   return now >= session.expires_at - 30;
+}
+
+function loadPreferredTab() {
+  const stored = localStorage.getItem(TAB_KEY);
+  return TAB_IDS.includes(stored) ? stored : "todayPanel";
+}
+
+function setPreferredTab(tabId) {
+  localStorage.setItem(TAB_KEY, tabId);
+}
+
+function setActiveTab(tabId) {
+  const targetId = TAB_IDS.includes(tabId) ? tabId : "todayPanel";
+
+  for (const id of TAB_IDS) {
+    const panel = panelMap[id];
+    if (!panel) continue;
+    const active = id === targetId;
+    panel.classList.toggle("hidden", !active);
+    panel.classList.toggle("is-active", active);
+  }
+
+  const tabButtons = mainTabs.querySelectorAll("button[data-tab-target]");
+  for (const button of tabButtons) {
+    const active = button.dataset.tabTarget === targetId;
+    button.classList.toggle("is-active", active);
+  }
+
+  setPreferredTab(targetId);
 }
 
 async function readJsonSafe(response) {
@@ -152,6 +205,7 @@ async function refreshSessionIfNeeded() {
       expires_at: refreshed.expires_at,
       user: refreshed.user,
     };
+
     saveSession(currentSession);
     return currentSession;
   } catch {
@@ -188,12 +242,12 @@ function renderWeightTable(records) {
   const rows = records
     .map(
       (item) => `
-      <tr>
-        <td>${formatDate(item.ts)}</td>
-        <td>${Number(item.weight).toFixed(1)}</td>
-        <td><button class="ghost" data-id="${item.id}">Eliminar</button></td>
-      </tr>
-    `
+        <tr>
+          <td>${formatDate(item.ts)}</td>
+          <td>${Number(item.weight).toFixed(1)}</td>
+          <td><button class="ghost" data-id="${item.id}">Eliminar</button></td>
+        </tr>
+      `
     )
     .join("");
 
@@ -201,24 +255,9 @@ function renderWeightTable(records) {
   contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
 }
 
-function statusToLabel(value) {
-  if (value === 1) return "Si";
-  if (value === 0) return "No";
-  return "Sin registro";
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 function renderHabitTable(habits, checksByHabit, date) {
   if (habits.length === 0) {
-    habitsTable.innerHTML = '<tr class="empty"><td colspan="3">Aun no hay habitos creados.</td></tr>';
+    habitsTable.innerHTML = '<tr class="empty"><td colspan="2">Aun no hay habitos creados.</td></tr>';
     habitCounter.textContent = "0 habitos";
     habitSummary.textContent = "Crea tu primer habito para empezar.";
     return;
@@ -231,6 +270,7 @@ function renderHabitTable(habits, checksByHabit, date) {
   const rows = habits
     .map((habit) => {
       const status = checksByHabit.has(habit.id) ? checksByHabit.get(habit.id) : null;
+
       if (status === 1) yesCount += 1;
       if (status === 0) noCount += 1;
       if (status === null) noLogCount += 1;
@@ -253,10 +293,15 @@ function renderHabitTable(habits, checksByHabit, date) {
             <div class="habit-checks">
               <button class="habit-btn yes ${yesActive}" data-habit-id="${habit.id}" data-status="1">Si</button>
               <button class="habit-btn no ${noActive}" data-habit-id="${habit.id}" data-status="0">No</button>
-              <button class="habit-btn ${clearActive}" data-clear-habit-id="${habit.id}">Sin registro</button>
+              <button
+                class="habit-btn ${clearActive}"
+                title="Marcar como sin registro"
+                data-clear-habit-id="${habit.id}"
+              >
+                ·
+              </button>
             </div>
           </td>
-          <td>${statusToLabel(status)}</td>
         </tr>
       `;
     })
@@ -269,7 +314,6 @@ function renderHabitTable(habits, checksByHabit, date) {
 
 function setAuthenticatedUI(isAuthenticated) {
   loginCard.classList.toggle("hidden", isAuthenticated);
-  sessionCard.classList.toggle("hidden", !isAuthenticated);
   zonaPrivada.classList.toggle("hidden", !isAuthenticated);
 
   if (isAuthenticated) {
@@ -282,6 +326,7 @@ function setAuthenticatedUI(isAuthenticated) {
   setStatus("Inicia sesion para usar la app.");
   renderWeightTable([]);
   renderHabitTable([], new Map(), getSelectedHabitDate());
+  setActiveTab("todayPanel");
 }
 
 async function fetchWeightRecords() {
@@ -369,14 +414,14 @@ async function refreshAllData() {
   if (habitsResult.status === "rejected") {
     const detail = habitsResult.reason.message || "error desconocido";
     const missingTables =
-      detail.includes('relation \"habits\" does not exist') ||
-      detail.includes('relation \"habit_checks\" does not exist');
+      detail.includes('relation "habits" does not exist') ||
+      detail.includes('relation "habit_checks" does not exist');
 
     if (missingTables) {
       setStatus("Falta crear tablas de habitos en Supabase. Ejecuta supabase_habits.sql.");
       habitSummary.textContent = "Pendiente: ejecutar SQL de habitos en Supabase.";
       habitsTable.innerHTML =
-        '<tr class="empty"><td colspan="3">Habitos no disponible hasta crear tablas.</td></tr>';
+        '<tr class="empty"><td colspan="2">Habitos no disponible hasta crear tablas.</td></tr>';
       habitCounter.textContent = "0 habitos";
     } else {
       setStatus(`Error en habitos: ${detail}`);
@@ -446,6 +491,7 @@ async function handleLogin() {
 
     saveSession(currentSession);
     setAuthenticatedUI(true);
+    setActiveTab(loadPreferredTab());
     await refreshAllData();
     setMessage("Sesion iniciada.");
   } catch (error) {
@@ -468,7 +514,7 @@ async function handleLogout() {
       });
     }
   } catch {
-    // If remote logout fails, local logout still continues.
+    // Ignore remote logout errors; local logout still continues.
   }
 
   clearSession();
@@ -621,6 +667,7 @@ async function handleCreateHabit() {
 
   const name = habitNameInput.value.trim();
   const description = habitDescriptionInput.value.trim();
+
   if (!name) {
     setMessage("El nombre del habito es obligatorio.");
     return;
@@ -644,6 +691,8 @@ async function handleCreateHabit() {
 
     habitNameInput.value = "";
     habitDescriptionInput.value = "";
+    if (newHabitDetails) newHabitDetails.open = false;
+
     await refreshHabits();
     setMessage("Habito creado.");
   } catch (error) {
@@ -660,24 +709,20 @@ async function upsertHabitStatus(habitId, status) {
   const logDate = getSelectedHabitDate();
 
   try {
-    await apiFetch(
-      `${SUPABASE_URL}/rest/v1/habit_checks?on_conflict=user_id,habit_id,log_date`,
-      {
-        method: "POST",
-        headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
-        body: JSON.stringify([
-          {
-            user_id: currentSession.user.id,
-            habit_id: Number(habitId),
-            log_date: logDate,
-            status: Number(status),
-          },
-        ]),
-      }
-    );
+    await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?on_conflict=user_id,habit_id,log_date`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify([
+        {
+          user_id: currentSession.user.id,
+          habit_id: Number(habitId),
+          log_date: logDate,
+          status: Number(status),
+        },
+      ]),
+    });
 
     await refreshHabits();
-    setMessage("Seguimiento actualizado.");
   } catch (error) {
     setMessage(`No se pudo guardar el seguimiento: ${error.message}`);
   }
@@ -704,7 +749,6 @@ async function clearHabitStatus(habitId) {
     });
 
     await refreshHabits();
-    setMessage("Seguimiento marcado como sin registro.");
   } catch (error) {
     setMessage(`No se pudo limpiar el seguimiento: ${error.message}`);
   }
@@ -724,6 +768,12 @@ function bindEvents() {
 
   logoutBtn.addEventListener("click", async () => {
     await handleLogout();
+  });
+
+  mainTabs.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-tab-target]");
+    if (!button) return;
+    setActiveTab(button.dataset.tabTarget);
   });
 
   guardarBtn.addEventListener("click", async () => {
@@ -777,6 +827,7 @@ function bindEvents() {
   habitDateInput.addEventListener("change", async () => {
     const ok = await ensureAuthenticated();
     if (!ok) return;
+
     try {
       await refreshHabits();
     } catch (error) {
@@ -808,6 +859,7 @@ async function init() {
   updateNow();
   setInterval(updateNow, 1000);
   bindEvents();
+  setActiveTab(loadPreferredTab());
 
   if (!currentSession) {
     setAuthenticatedUI(false);
@@ -821,6 +873,8 @@ async function init() {
   }
 
   setAuthenticatedUI(true);
+  setActiveTab(loadPreferredTab());
+
   try {
     await refreshAllData();
   } catch (error) {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Registro de Peso</title>
+    <title>Registro Personal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -24,10 +24,10 @@
       <div id="estadoApp" class="status-banner"></div>
 
       <section class="card" id="loginCard">
-        <div class="auth" id="authBox">
+        <div class="auth">
           <div class="auth-info">
             <h2>Acceso</h2>
-            <p class="subtitle">Inicia sesión para ver y guardar tus datos.</p>
+            <p class="subtitle">Inicia sesion para ver y guardar tus datos.</p>
           </div>
           <div class="auth-form">
             <div class="field">
@@ -43,113 +43,135 @@
         </div>
       </section>
 
-      <section class="card hidden" id="sessionCard">
-        <div class="tools">
-          <p class="subtitle">Sesión activa: <strong id="sessionStatus">—</strong></p>
-          <button id="logout" class="ghost">Salir</button>
-        </div>
-      </section>
-
       <div id="zonaPrivada" class="hidden">
-        <section class="card">
-          <div class="form-row">
-            <div class="field">
-              <label for="peso">Peso (kg)</label>
-              <input id="peso" type="number" inputmode="decimal" step="0.1" min="0" placeholder="Ej: 72.4" />
-            </div>
-            <div class="field">
-              <label>Fecha y hora</label>
-              <div class="readonly" id="fechaActual">—</div>
-            </div>
-            <button id="guardar" class="primary">Registrar</button>
+        <section class="card nav-card" id="sessionCard">
+          <div class="top-bar">
+            <p class="subtitle">Sesion activa: <strong id="sessionStatus">-</strong></p>
+            <button id="logout" class="ghost">Salir</button>
           </div>
-          <p class="hint">La fecha y hora se guarda automáticamente al momento de registrar.</p>
+          <nav class="tab-nav" id="mainTabs" aria-label="Secciones de la app">
+            <button class="tab-btn is-active" data-tab-target="todayPanel">Hoy</button>
+            <button class="tab-btn" data-tab-target="weightPanel">Peso</button>
+            <button class="tab-btn" data-tab-target="historyPanel">Historial</button>
+          </nav>
         </section>
 
-        <section class="card">
-          <div class="tools">
-            <div class="tool-group">
-              <button id="exportar" class="secondary">Exportar CSV</button>
-              <label class="file-btn" for="importar">
-                Importar CSV
-                <input id="importar" type="file" accept=".csv,text/csv" />
+        <section id="todayPanel" class="panel is-active">
+          <section class="card">
+            <div class="table-header">
+              <h2>Habitos de hoy</h2>
+              <span id="habitCounter" class="chip">0 habitos</span>
+            </div>
+            <div class="today-summary">
+              <label class="field date-field" for="habitDate">
+                <span>Fecha</span>
+                <input id="habitDate" type="date" />
               </label>
+              <p id="habitSummary" class="hint">Sin registro diario aun.</p>
             </div>
-            <div class="tool-group">
-              <button id="limpiar" class="ghost">Borrar todo</button>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Habito</th>
+                    <th>Seguimiento diario</th>
+                  </tr>
+                </thead>
+                <tbody id="habitsTable">
+                  <tr class="empty">
+                    <td colspan="2">Aun no hay habitos creados.</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </div>
-          <p class="hint">El CSV usa el formato: <span class="mono">timestamp,weight</span> (timestamp en ISO 8601).</p>
+          </section>
+
+          <section class="card">
+            <details id="newHabitDetails">
+              <summary>+ Nuevo habito</summary>
+              <div class="habit-form">
+                <div class="field">
+                  <label for="habitName">Nombre</label>
+                  <input id="habitName" type="text" placeholder="Ej: Ejercicios de fuerza" />
+                </div>
+                <div class="field">
+                  <label for="habitDescription">Descripcion (opcional)</label>
+                  <input id="habitDescription" type="text" placeholder="Ej: 20-30 min al final del dia" />
+                </div>
+                <button id="createHabit" class="primary">Crear habito</button>
+              </div>
+            </details>
+          </section>
         </section>
 
-        <section class="card table-card">
-          <div class="table-header">
-            <h2>Historial</h2>
-            <span id="contador" class="chip">0 registros</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Fecha y hora</th>
-                  <th>Peso (kg)</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="tabla">
-                <tr class="empty">
-                  <td colspan="3">Aún no hay registros.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <section id="weightPanel" class="panel hidden">
+          <section class="card">
+            <div class="table-header">
+              <h2>Registrar peso</h2>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="peso">Peso (kg)</label>
+                <input id="peso" type="number" inputmode="decimal" step="0.1" min="0" placeholder="Ej: 72.4" />
+              </div>
+              <div class="field">
+                <label>Fecha y hora</label>
+                <div class="readonly" id="fechaActual">-</div>
+              </div>
+              <button id="guardar" class="primary">Registrar</button>
+            </div>
+            <p class="hint">La fecha y hora se guarda automaticamente al momento de registrar.</p>
+          </section>
+
+          <section class="card">
+            <details id="weightToolsDetails">
+              <summary>Herramientas de peso</summary>
+              <div class="tools weight-tools">
+                <div class="tool-group">
+                  <button id="exportar" class="secondary">Exportar CSV</button>
+                  <label class="file-btn" for="importar">
+                    Importar CSV
+                    <input id="importar" type="file" accept=".csv,text/csv" />
+                  </label>
+                </div>
+                <div class="tool-group">
+                  <button id="limpiar" class="danger">Borrar todo</button>
+                </div>
+              </div>
+              <p class="hint">El CSV usa el formato: <span class="mono">timestamp,weight</span> (timestamp en ISO 8601).</p>
+            </details>
+          </section>
         </section>
 
-        <section class="card">
-          <div class="table-header">
-            <h2>Habitos</h2>
-            <span id="habitCounter" class="chip">0 habitos</span>
-          </div>
-          <div class="habit-form">
-            <div class="field">
-              <label for="habitName">Nuevo habito</label>
-              <input id="habitName" type="text" placeholder="Ej: Ejercicios de fuerza" />
+        <section id="historyPanel" class="panel hidden">
+          <section class="card table-card">
+            <div class="table-header">
+              <h2>Historial de peso</h2>
+              <span id="contador" class="chip">0 registros</span>
             </div>
-            <div class="field">
-              <label for="habitDescription">Descripcion (opcional)</label>
-              <input id="habitDescription" type="text" placeholder="Ej: 20-30 min al final del dia" />
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha y hora</th>
+                    <th>Peso (kg)</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="tabla">
+                  <tr class="empty">
+                    <td colspan="3">Aun no hay registros.</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <button id="createHabit" class="primary">Crear habito</button>
-          </div>
-          <div class="tools habit-tools">
-            <label class="field habit-date-field" for="habitDate">
-              <span>Fecha de seguimiento</span>
-              <input id="habitDate" type="date" />
-            </label>
-            <p id="habitSummary" class="hint">Sin registro diario aun.</p>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Habito</th>
-                  <th>Seguimiento diario</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-              <tbody id="habitsTable">
-                <tr class="empty">
-                  <td colspan="3">Aun no hay habitos creados.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          </section>
         </section>
       </div>
 
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=habits-20260208"></script>
+    <script src="app.js?v=ui-20260208a"></script>
   </body>
 </html>

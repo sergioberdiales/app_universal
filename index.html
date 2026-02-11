@@ -16,9 +16,7 @@
     <div class="bg"></div>
     <main class="app">
       <header class="hero">
-        <p class="kicker">Simple · Privado · Local</p>
         <h1>Registro Personal</h1>
-        <p class="subtitle">Registra tu peso y tus habitos diarios en la nube con el minimo de friccion.</p>
       </header>
 
       <div id="estadoApp" class="status-banner"></div>
@@ -46,13 +44,12 @@
       <div id="zonaPrivada" class="hidden">
         <section class="card nav-card" id="sessionCard">
           <div class="top-bar">
-            <p class="subtitle">Sesion activa: <strong id="sessionStatus">-</strong></p>
             <button id="logout" class="ghost">Salir</button>
           </div>
           <nav class="tab-nav" id="mainTabs" aria-label="Secciones de la app">
-            <button class="tab-btn is-active" data-tab-target="todayPanel">Hoy</button>
-            <button class="tab-btn" data-tab-target="weightPanel">Peso</button>
-            <button class="tab-btn" data-tab-target="historyPanel">Historial</button>
+            <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">Hoy</button>
+            <button type="button" class="tab-btn" data-tab-target="weightPanel">Peso</button>
+            <button type="button" class="tab-btn" data-tab-target="historyPanel">Historial</button>
           </nav>
         </section>
 
@@ -172,6 +169,6 @@
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=ui-20260208a"></script>
+    <script src="app.js?v=ui-cleanup-20260208"></script>
   </body>
 </html>

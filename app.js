@@ -24,7 +24,6 @@ const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const loginBtn = document.getElementById("login");
 const logoutBtn = document.getElementById("logout");
-const sessionStatus = document.getElementById("sessionStatus");
 
 const pesoInput = document.getElementById("peso");
 const fechaActual = document.getElementById("fechaActual");
@@ -149,6 +148,7 @@ function setActiveTab(tabId) {
     panel.classList.toggle("is-active", active);
   }
 
+  if (!mainTabs) return;
   const tabButtons = mainTabs.querySelectorAll("button[data-tab-target]");
   for (const button of tabButtons) {
     const active = button.dataset.tabTarget === targetId;
@@ -265,7 +265,7 @@ function renderHabitTable(habits, checksByHabit, date) {
 
   let yesCount = 0;
   let noCount = 0;
-  let noLogCount = 0;
+  let pendingCount = 0;
 
   const rows = habits
     .map((habit) => {
@@ -273,11 +273,10 @@ function renderHabitTable(habits, checksByHabit, date) {
 
       if (status === 1) yesCount += 1;
       if (status === 0) noCount += 1;
-      if (status === null) noLogCount += 1;
+      if (status === null) pendingCount += 1;
 
       const yesActive = status === 1 ? "is-active" : "";
       const noActive = status === 0 ? "is-active" : "";
-      const clearActive = status === null ? "is-active" : "";
 
       const description = habit.description
         ? `<div class="habit-description">${escapeHtml(habit.description)}</div>`
@@ -293,13 +292,6 @@ function renderHabitTable(habits, checksByHabit, date) {
             <div class="habit-checks">
               <button class="habit-btn yes ${yesActive}" data-habit-id="${habit.id}" data-status="1">Si</button>
               <button class="habit-btn no ${noActive}" data-habit-id="${habit.id}" data-status="0">No</button>
-              <button
-                class="habit-btn ${clearActive}"
-                title="Marcar como sin registro"
-                data-clear-habit-id="${habit.id}"
-              >
-                ·
-              </button>
             </div>
           </td>
         </tr>
@@ -309,7 +301,7 @@ function renderHabitTable(habits, checksByHabit, date) {
 
   habitsTable.innerHTML = rows;
   habitCounter.textContent = `${habits.length} habito${habits.length === 1 ? "" : "s"}`;
-  habitSummary.textContent = `${date}: ${yesCount} si, ${noCount} no, ${noLogCount} sin registro.`;
+  habitSummary.textContent = `${date}: ${yesCount} si, ${noCount} no, ${pendingCount} pendientes.`;
 }
 
 function setAuthenticatedUI(isAuthenticated) {
@@ -317,12 +309,10 @@ function setAuthenticatedUI(isAuthenticated) {
   zonaPrivada.classList.toggle("hidden", !isAuthenticated);
 
   if (isAuthenticated) {
-    sessionStatus.textContent = currentSession.user.email;
     setStatus("");
     return;
   }
 
-  sessionStatus.textContent = "-";
   setStatus("Inicia sesion para usar la app.");
   renderWeightTable([]);
   renderHabitTable([], new Map(), getSelectedHabitDate());
@@ -728,32 +718,6 @@ async function upsertHabitStatus(habitId, status) {
   }
 }
 
-async function clearHabitStatus(habitId) {
-  const ok = await ensureAuthenticated("Inicia sesion para registrar habitos.");
-  if (!ok) return;
-
-  const logDate = getSelectedHabitDate();
-  const params = new URLSearchParams({
-    user_id: `eq.${currentSession.user.id}`,
-    habit_id: `eq.${habitId}`,
-    log_date: `eq.${logDate}`,
-  });
-
-  try {
-    await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
-      method: "DELETE",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${currentSession.access_token}`,
-      },
-    });
-
-    await refreshHabits();
-  } catch (error) {
-    setMessage(`No se pudo limpiar el seguimiento: ${error.message}`);
-  }
-}
-
 function bindEvents() {
   loginBtn.addEventListener("click", async (event) => {
     event.preventDefault();
@@ -770,11 +734,13 @@ function bindEvents() {
     await handleLogout();
   });
 
-  mainTabs.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-tab-target]");
-    if (!button) return;
-    setActiveTab(button.dataset.tabTarget);
-  });
+  if (mainTabs) {
+    mainTabs.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-tab-target]");
+      if (!button) return;
+      setActiveTab(button.dataset.tabTarget);
+    });
+  }
 
   guardarBtn.addEventListener("click", async () => {
     await handleAddWeight();
@@ -839,12 +805,6 @@ function bindEvents() {
     const statusBtn = event.target.closest("button[data-habit-id][data-status]");
     if (statusBtn) {
       await upsertHabitStatus(statusBtn.dataset.habitId, statusBtn.dataset.status);
-      return;
-    }
-
-    const clearBtn = event.target.closest("button[data-clear-habit-id]");
-    if (clearBtn) {
-      await clearHabitStatus(clearBtn.dataset.clearHabitId);
     }
   });
 

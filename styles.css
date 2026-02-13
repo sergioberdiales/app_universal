@@ -44,15 +44,7 @@ body {
 
 .hero {
   display: grid;
-  gap: 10px;
-}
-
-.kicker {
-  margin: 0;
-  font-size: 0.9rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
+  gap: 6px;
 }
 
 h1 {
@@ -291,12 +283,60 @@ td {
 .habit-name {
   font-weight: 600;
   font-size: 1.08rem;
+  margin: 0;
+}
+
+.habit-name-toggle {
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  color: inherit;
+  text-align: left;
+  font-size: 1.08rem;
+  font-weight: 600;
+}
+
+.habit-name-toggle:active {
+  transform: none;
+}
+
+.habit-metrics {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.habit-streak {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.streak-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #cbc7d8;
+}
+
+.streak-dot.yes {
+  background: var(--accent-2);
+}
+
+.streak-dot.no {
+  background: var(--danger);
+}
+
+.streak-dot.pending {
+  background: #bfb9cf;
 }
 
 .habit-description {
-  margin-top: 4px;
+  margin-top: 8px;
   color: var(--muted);
   font-size: 0.92rem;
+  line-height: 1.35;
 }
 
 .habit-checks {
@@ -469,5 +509,14 @@ details[open] summary::before {
   .file-btn {
     width: 100%;
     text-align: center;
+  }
+
+  .habit-checks .habit-btn,
+  .habit-name-toggle {
+    width: auto;
+  }
+
+  .habit-checks {
+    width: 100%;
   }
 }

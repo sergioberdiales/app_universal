@@ -45,6 +45,8 @@ const newHabitDetails = document.getElementById("newHabitDetails");
 
 let currentSession = loadSession();
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function pad2(value) {
   return String(value).padStart(2, "0");
 }
@@ -52,6 +54,29 @@ function pad2(value) {
 function todayLocalDateString() {
   const now = new Date();
   return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
+function parseDateOnly(dateString) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dateToDateOnlyString(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function addDaysToDateString(dateString, deltaDays) {
+  const date = parseDateOnly(dateString);
+  date.setDate(date.getDate() + deltaDays);
+  return dateToDateOnlyString(date);
+}
+
+function inclusiveDayDistance(startDate, endDate) {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  const diff = Math.floor((end.getTime() - start.getTime()) / DAY_MS);
+  if (diff < 0) return 0;
+  return diff + 1;
 }
 
 function getSelectedHabitDate() {
@@ -255,7 +280,7 @@ function renderWeightTable(records) {
   contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
 }
 
-function renderHabitTable(habits, checksByHabit, date) {
+function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesCountByHabit, date) {
   if (habits.length === 0) {
     habitsTable.innerHTML = '<tr class="empty"><td colspan="2">Aun no hay habitos creados.</td></tr>';
     habitCounter.textContent = "0 habitos";
@@ -269,7 +294,8 @@ function renderHabitTable(habits, checksByHabit, date) {
 
   const rows = habits
     .map((habit) => {
-      const status = checksByHabit.has(habit.id) ? checksByHabit.get(habit.id) : null;
+      const habitId = Number(habit.id);
+      const status = selectedStatusByHabit.has(habitId) ? selectedStatusByHabit.get(habitId) : null;
 
       if (status === 1) yesCount += 1;
       if (status === 0) noCount += 1;
@@ -278,20 +304,48 @@ function renderHabitTable(habits, checksByHabit, date) {
       const yesActive = status === 1 ? "is-active" : "";
       const noActive = status === 0 ? "is-active" : "";
 
+      const createdDate = (habit.created_at || "").slice(0, 10);
+      const totalDays = createdDate ? inclusiveDayDistance(createdDate, date) : 0;
+      const yesDays = yesCountByHabit.get(habitId) || 0;
+      const percentage = totalDays > 0 ? Math.round((yesDays / totalDays) * 100) : 0;
+      const progressLabel =
+        totalDays > 0 ? `${yesDays}/${totalDays} dias · ${percentage}%` : "No existia en esta fecha";
+
+      const perDayStatus = statusByHabitDate.get(habitId) || new Map();
+      const streakDots = [];
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const day = addDaysToDateString(date, -offset);
+        const dayStatus = perDayStatus.has(day) ? Number(perDayStatus.get(day)) : null;
+        const dotClass = dayStatus === 1 ? "yes" : dayStatus === 0 ? "no" : "pending";
+        const dotLabel = dayStatus === 1 ? "Si" : dayStatus === 0 ? "No" : "Pendiente";
+        streakDots.push(
+          `<span class="streak-dot ${dotClass}" title="${day}: ${dotLabel}" aria-label="${day}: ${dotLabel}"></span>`
+        );
+      }
+
       const description = habit.description
-        ? `<div class="habit-description">${escapeHtml(habit.description)}</div>`
+        ? `<div class="habit-description hidden" data-description-for="${habitId}">${escapeHtml(
+            habit.description
+          )}</div>`
         : "";
+      const nameContent = habit.description
+        ? `<button type="button" class="habit-name habit-name-toggle" data-toggle-description="${habitId}" aria-expanded="false">${escapeHtml(
+            habit.name
+          )}</button>`
+        : `<div class="habit-name">${escapeHtml(habit.name)}</div>`;
 
       return `
         <tr>
           <td>
-            <div class="habit-name">${escapeHtml(habit.name)}</div>
+            ${nameContent}
+            <div class="habit-metrics">${progressLabel}</div>
+            <div class="habit-streak" aria-hidden="true">${streakDots.join("")}</div>
             ${description}
           </td>
           <td>
             <div class="habit-checks">
-              <button class="habit-btn yes ${yesActive}" data-habit-id="${habit.id}" data-status="1">Si</button>
-              <button class="habit-btn no ${noActive}" data-habit-id="${habit.id}" data-status="0">No</button>
+              <button type="button" class="habit-btn yes ${yesActive}" data-habit-id="${habit.id}" data-status="1">Si</button>
+              <button type="button" class="habit-btn no ${noActive}" data-habit-id="${habit.id}" data-status="0">No</button>
             </div>
           </td>
         </tr>
@@ -315,7 +369,7 @@ function setAuthenticatedUI(isAuthenticated) {
 
   setStatus("Inicia sesion para usar la app.");
   renderWeightTable([]);
-  renderHabitTable([], new Map(), getSelectedHabitDate());
+  renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
   setActiveTab("todayPanel");
 }
 
@@ -358,14 +412,15 @@ async function fetchHabits() {
   });
 }
 
-async function fetchHabitChecks(logDate) {
+async function fetchHabitChecksUntil(logDate) {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
   const params = new URLSearchParams({
     select: "habit_id,status,log_date",
     user_id: `eq.${currentSession.user.id}`,
-    log_date: `eq.${logDate}`,
+    log_date: `lte.${logDate}`,
+    order: "log_date.asc",
   });
 
   return apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
@@ -384,14 +439,30 @@ async function refreshWeights() {
 
 async function refreshHabits() {
   const logDate = getSelectedHabitDate();
-  const [habits, checks] = await Promise.all([fetchHabits(), fetchHabitChecks(logDate)]);
+  const [habits, checksUntilDate] = await Promise.all([fetchHabits(), fetchHabitChecksUntil(logDate)]);
 
-  const checksByHabit = new Map();
-  for (const check of checks) {
-    checksByHabit.set(Number(check.habit_id), Number(check.status));
+  const selectedStatusByHabit = new Map();
+  const statusByHabitDate = new Map();
+  const yesCountByHabit = new Map();
+
+  for (const check of checksUntilDate) {
+    const habitId = Number(check.habit_id);
+    const status = Number(check.status);
+    const day = check.log_date;
+
+    if (!statusByHabitDate.has(habitId)) statusByHabitDate.set(habitId, new Map());
+    statusByHabitDate.get(habitId).set(day, status);
+
+    if (day === logDate) {
+      selectedStatusByHabit.set(habitId, status);
+    }
+
+    if (status === 1) {
+      yesCountByHabit.set(habitId, (yesCountByHabit.get(habitId) || 0) + 1);
+    }
   }
 
-  renderHabitTable(habits, checksByHabit, logDate);
+  renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesCountByHabit, logDate);
 }
 
 async function refreshAllData() {
@@ -802,6 +873,18 @@ function bindEvents() {
   });
 
   habitsTable.addEventListener("click", async (event) => {
+    const descriptionToggle = event.target.closest("button[data-toggle-description]");
+    if (descriptionToggle) {
+      const habitId = descriptionToggle.dataset.toggleDescription;
+      const description = habitsTable.querySelector(`[data-description-for="${habitId}"]`);
+      if (description) {
+        const nextHidden = !description.classList.contains("hidden");
+        description.classList.toggle("hidden", nextHidden);
+        descriptionToggle.setAttribute("aria-expanded", String(!nextHidden));
+      }
+      return;
+    }
+
     const statusBtn = event.target.closest("button[data-habit-id][data-status]");
     if (statusBtn) {
       await upsertHabitStatus(statusBtn.dataset.habitId, statusBtn.dataset.status);

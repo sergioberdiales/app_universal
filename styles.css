@@ -194,8 +194,11 @@ button:disabled {
 }
 
 .nav-card {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .tab-nav {
@@ -595,6 +598,11 @@ details[open] summary::before {
 }
 
 @media (max-width: 820px) {
+  .nav-card {
+    display: grid;
+    gap: 12px;
+  }
+
   .habit-form,
   .form-row {
     grid-template-columns: 1fr;

@@ -3,7 +3,7 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
 const SESSION_KEY = "peso_supabase_session_v1";
 const TAB_KEY = "registro_tab_v1";
-const TAB_IDS = ["todayPanel", "weightPanel", "historyPanel"];
+const TAB_IDS = ["todayPanel", "weightPanel"];
 
 const loginCard = document.getElementById("loginCard");
 const zonaPrivada = document.getElementById("zonaPrivada");
@@ -13,11 +13,9 @@ const mensaje = document.getElementById("mensaje");
 const mainTabs = document.getElementById("mainTabs");
 const todayPanel = document.getElementById("todayPanel");
 const weightPanel = document.getElementById("weightPanel");
-const historyPanel = document.getElementById("historyPanel");
 const panelMap = {
   todayPanel,
   weightPanel,
-  historyPanel,
 };
 
 const emailInput = document.getElementById("email");

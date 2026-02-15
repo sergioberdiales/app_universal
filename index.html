@@ -47,9 +47,8 @@
             <button id="logout" class="ghost">Salir</button>
           </div>
           <nav class="tab-nav" id="mainTabs" aria-label="Secciones de la app">
-            <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">Hoy</button>
+            <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">Habitos</button>
             <button type="button" class="tab-btn" data-tab-target="weightPanel">Peso</button>
-            <button type="button" class="tab-btn" data-tab-target="historyPanel">Historial</button>
           </nav>
         </section>
 
@@ -120,27 +119,6 @@
             <p class="hint">La fecha y hora se guarda automaticamente al momento de registrar.</p>
           </section>
 
-          <section class="card">
-            <details id="weightToolsDetails">
-              <summary>Herramientas de peso</summary>
-              <div class="tools weight-tools">
-                <div class="tool-group">
-                  <button id="exportar" class="secondary">Exportar CSV</button>
-                  <label class="file-btn" for="importar">
-                    Importar CSV
-                    <input id="importar" type="file" accept=".csv,text/csv" />
-                  </label>
-                </div>
-                <div class="tool-group">
-                  <button id="limpiar" class="danger">Borrar todo</button>
-                </div>
-              </div>
-              <p class="hint">El CSV usa el formato: <span class="mono">timestamp,weight</span> (timestamp en ISO 8601).</p>
-            </details>
-          </section>
-        </section>
-
-        <section id="historyPanel" class="panel hidden">
           <section class="card table-card">
             <div class="table-header">
               <h2>Historial de peso</h2>
@@ -163,12 +141,31 @@
               </table>
             </div>
           </section>
+
+          <section class="card">
+            <details id="weightToolsDetails">
+              <summary>Herramientas de peso</summary>
+              <div class="tools weight-tools">
+                <div class="tool-group">
+                  <button id="exportar" class="secondary">Exportar CSV</button>
+                  <label class="file-btn" for="importar">
+                    Importar CSV
+                    <input id="importar" type="file" accept=".csv,text/csv" />
+                  </label>
+                </div>
+                <div class="tool-group">
+                  <button id="limpiar" class="danger">Borrar todo</button>
+                </div>
+              </div>
+              <p class="hint">El CSV usa el formato: <span class="mono">timestamp,weight</span> (timestamp en ISO 8601).</p>
+            </details>
+          </section>
         </section>
       </div>
 
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=habit-metrics-20260213"></script>
+    <script src="app.js?v=tabs-20260215"></script>
   </body>
 </html>

@@ -3,7 +3,7 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
 const SESSION_KEY = "peso_supabase_session_v1";
 const TAB_KEY = "registro_tab_v1";
-const TAB_IDS = ["todayPanel", "weightPanel"];
+const TAB_IDS = ["todayPanel", "weightPanel", "medicationPanel"];
 
 const loginCard = document.getElementById("loginCard");
 const zonaPrivada = document.getElementById("zonaPrivada");
@@ -13,9 +13,11 @@ const mensaje = document.getElementById("mensaje");
 const mainTabs = document.getElementById("mainTabs");
 const todayPanel = document.getElementById("todayPanel");
 const weightPanel = document.getElementById("weightPanel");
+const medicationPanel = document.getElementById("medicationPanel");
 const panelMap = {
   todayPanel,
   weightPanel,
+  medicationPanel,
 };
 
 const emailInput = document.getElementById("email");
@@ -41,9 +43,30 @@ const habitCounter = document.getElementById("habitCounter");
 const habitSummary = document.getElementById("habitSummary");
 const newHabitDetails = document.getElementById("newHabitDetails");
 
+const medTodayBadge = document.getElementById("medTodayBadge");
+const medScheduledList = document.getElementById("medScheduledList");
+const medPrnList = document.getElementById("medPrnList");
+const medHistoryMedication = document.getElementById("medHistoryMedication");
+const medHistorySource = document.getElementById("medHistorySource");
+const medHistoryFrom = document.getElementById("medHistoryFrom");
+const medHistoryTo = document.getElementById("medHistoryTo");
+const medHistoryApply = document.getElementById("medHistoryApply");
+const medHistoryList = document.getElementById("medHistoryList");
+
 let currentSession = loadSession();
+let medicationSeedChecked = false;
+let medicationCache = {
+  medications: [],
+  plans: [],
+  plansById: new Map(),
+  medicationById: new Map(),
+  latestScheduledTodayByPlan: new Map(),
+  latestExtraByPlan: new Map(),
+  intakes: [],
+};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const EXTRA_SOFT_BRAKE_HOURS = 4;
 
 function pad2(value) {
   return String(value).padStart(2, "0");
@@ -75,6 +98,51 @@ function inclusiveDayDistance(startDate, endDate) {
   const diff = Math.floor((end.getTime() - start.getTime()) / DAY_MS);
   if (diff < 0) return 0;
   return diff + 1;
+}
+
+function startOfLocalDayIso(dateString) {
+  const day = parseDateOnly(dateString);
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
+  return start.toISOString();
+}
+
+function endOfLocalDayExclusiveIso(dateString) {
+  const day = parseDateOnly(dateString);
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1, 0, 0, 0, 0);
+  return end.toISOString();
+}
+
+function isoToLocalDateString(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function formatTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+function dayLabel(dateString) {
+  const today = todayLocalDateString();
+  const yesterday = addDaysToDateString(today, -1);
+  if (dateString === today) return "Hoy";
+  if (dateString === yesterday) return "Ayer";
+  const date = parseDateOnly(dateString);
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
+function sourceLabel(value) {
+  return value === "scheduled" ? "programada" : "extra";
+}
+
+function reasonLabel(value) {
+  if (value === "nervios") return "nervios";
+  if (value === "tics") return "tics";
+  if (value === "presentacion") return "presentacion";
+  if (value === "otro") return "otro";
+  return "";
 }
 
 function getSelectedHabitDate() {
@@ -356,6 +424,195 @@ function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesC
   habitSummary.textContent = `${date}: ${yesCount} si, ${noCount} no, ${pendingCount} pendientes.`;
 }
 
+function resetMedicationUI() {
+  medicationCache = {
+    medications: [],
+    plans: [],
+    plansById: new Map(),
+    medicationById: new Map(),
+    latestScheduledTodayByPlan: new Map(),
+    latestExtraByPlan: new Map(),
+    intakes: [],
+  };
+  medTodayBadge.textContent = "0 programadas pendientes";
+  medScheduledList.innerHTML = '<div class="empty-message">No hay medicaciones programadas activas.</div>';
+  medPrnList.innerHTML = '<div class="empty-message">No hay medicaciones a demanda activas.</div>';
+  medHistoryList.innerHTML = '<div class="empty-message">Aun no hay eventos de medicacion.</div>';
+  medHistoryMedication.innerHTML = '<option value="">Todas</option>';
+}
+
+function populateMedicationFilterOptions(medications) {
+  const currentValue = medHistoryMedication.value;
+  const options = [
+    '<option value="">Todas</option>',
+    ...medications.map((med) => `<option value="${med.id}">${escapeHtml(med.name)}</option>`),
+  ];
+  medHistoryMedication.innerHTML = options.join("");
+  medHistoryMedication.value = medications.some((med) => String(med.id) === String(currentValue))
+    ? currentValue
+    : "";
+}
+
+function timeWindowLabel(timeWindow) {
+  if (timeWindow === "morning") return "manana";
+  if (timeWindow === "afternoon") return "tarde";
+  if (timeWindow === "night") return "noche";
+  return "sin ventana";
+}
+
+function renderMedicationToday(plans, medicationsById, todayScheduledByPlan, latestExtraByPlan) {
+  const scheduledPlans = plans.filter((plan) => plan.type === "scheduled");
+  const prnPlans = plans.filter((plan) => plan.type === "prn");
+
+  const pendingScheduled = scheduledPlans.filter((plan) => !todayScheduledByPlan.has(plan.id)).length;
+  medTodayBadge.textContent = `${pendingScheduled} programadas pendientes`;
+
+  if (scheduledPlans.length === 0) {
+    medScheduledList.innerHTML = '<div class="empty-message">No hay medicaciones programadas activas.</div>';
+  } else {
+    medScheduledList.innerHTML = scheduledPlans
+      .map((plan) => {
+        const med = medicationsById.get(plan.medication_id);
+        const medName = med ? med.name : "Medicacion";
+        const takenToday = todayScheduledByPlan.get(plan.id) || null;
+        const scheduleMeta = `1 vez al dia (${timeWindowLabel(plan.time_window)})`;
+
+        return `
+          <article class="med-item">
+            <div class="med-item-main">
+              <div class="med-name">${escapeHtml(medName)}</div>
+              <div class="med-meta">${scheduleMeta}</div>
+            </div>
+            ${
+              takenToday
+                ? `<div class="med-taken">Tomada a las ${formatTime(takenToday.timestamp)}</div>`
+                : '<div class="med-meta">Pendiente de registrar hoy.</div>'
+            }
+            <div class="med-actions">
+              <button
+                type="button"
+                class="primary"
+                data-med-action="take-scheduled"
+                data-plan-id="${plan.id}"
+              >
+                ${takenToday ? "Registrar otra igualmente" : "Marcar como tomada"}
+              </button>
+              ${
+                takenToday
+                  ? `<button
+                      type="button"
+                      class="ghost"
+                      data-med-action="undo-scheduled"
+                      data-intake-id="${takenToday.id}"
+                    >
+                      Deshacer
+                    </button>`
+                  : ""
+              }
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  if (prnPlans.length === 0) {
+    medPrnList.innerHTML = '<div class="empty-message">No hay medicaciones a demanda activas.</div>';
+  } else {
+    medPrnList.innerHTML = prnPlans
+      .map((plan) => {
+        const med = medicationsById.get(plan.medication_id);
+        const medName = med ? med.name : "Medicacion";
+        const lastExtra = latestExtraByPlan.get(plan.id);
+        const isRecentExtra =
+          lastExtra &&
+          Math.abs(Date.now() - new Date(lastExtra.timestamp).getTime()) / (60 * 60 * 1000) <=
+            EXTRA_SOFT_BRAKE_HOURS;
+        const warning = isRecentExtra
+          ? `<div class="med-warning">Ultima extra fue a las ${formatTime(lastExtra.timestamp)}</div>`
+          : "";
+
+        return `
+          <article class="med-item">
+            <div class="med-item-main">
+              <div class="med-name">${escapeHtml(medName)} extra</div>
+              <div class="med-meta">A demanda</div>
+            </div>
+            ${warning}
+            <div class="med-extra-fields">
+              <label class="field">
+                <span>Motivo</span>
+                <select data-prn-reason-for="${plan.id}">
+                  <option value="">Sin motivo</option>
+                  <option value="nervios">Nervios</option>
+                  <option value="tics">Tics</option>
+                  <option value="presentacion">Presentacion</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Notas</span>
+                <input type="text" data-prn-notes-for="${plan.id}" placeholder="Opcional" />
+              </label>
+              <button
+                type="button"
+                class="secondary"
+                data-med-action="take-extra"
+                data-plan-id="${plan.id}"
+              >
+                Registrar toma extra
+              </button>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+}
+
+function renderMedicationHistory(items, medicationsById) {
+  if (items.length === 0) {
+    medHistoryList.innerHTML = '<div class="empty-message">Aun no hay eventos de medicacion.</div>';
+    return;
+  }
+
+  const grouped = new Map();
+  for (const item of items) {
+    const day = isoToLocalDateString(item.timestamp);
+    if (!grouped.has(day)) grouped.set(day, []);
+    grouped.get(day).push(item);
+  }
+
+  const blocks = Array.from(grouped.entries())
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([day, dayItems]) => {
+      const events = dayItems
+        .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))
+        .map((event) => {
+          const med = medicationsById.get(event.medication_id);
+          const medName = med ? med.name : "Medicacion";
+          const amount = Number(event.amount || 1);
+          const amountLabel = Number.isNaN(amount) ? "" : ` x${amount}`;
+          const reason = event.reason ? `, ${reasonLabel(event.reason)}` : "";
+          const notes = event.notes ? ` - ${escapeHtml(event.notes)}` : "";
+          return `<li>${escapeHtml(medName)}${amountLabel} ${formatTime(event.timestamp)} (${sourceLabel(
+            event.source
+          )}${reason})${notes}</li>`;
+        })
+        .join("");
+
+      return `
+        <article class="med-history-day">
+          <div class="med-history-day-title">${dayLabel(day)} (${day})</div>
+          <ul class="med-history-events">${events}</ul>
+        </article>
+      `;
+    })
+    .join("");
+
+  medHistoryList.innerHTML = blocks;
+}
+
 function setAuthenticatedUI(isAuthenticated) {
   loginCard.classList.toggle("hidden", isAuthenticated);
   zonaPrivada.classList.toggle("hidden", !isAuthenticated);
@@ -368,6 +625,7 @@ function setAuthenticatedUI(isAuthenticated) {
   setStatus("Inicia sesion para usar la app.");
   renderWeightTable([]);
   renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
+  resetMedicationUI();
   setActiveTab("todayPanel");
 }
 
@@ -430,6 +688,224 @@ async function fetchHabitChecksUntil(logDate) {
   });
 }
 
+function isActiveOnDate(item, date) {
+  if (item.active_from && item.active_from > date) return false;
+  if (item.active_to && item.active_to < date) return false;
+  return true;
+}
+
+async function fetchMedicationsCatalog() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = new URLSearchParams({
+    select: "id,name,form,strength,notes,active_from,active_to",
+    user_id: `eq.${currentSession.user.id}`,
+    order: "name.asc",
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/medications?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
+async function fetchMedicationPlans() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = new URLSearchParams({
+    select: "id,medication_id,type,frequency,time_window,target_time,tolerance_minutes,active_from,active_to",
+    user_id: `eq.${currentSession.user.id}`,
+    order: "id.asc",
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/medication_plans?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
+async function fetchMedicationIntakes() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = new URLSearchParams({
+    select: "id,medication_id,plan_id,timestamp,amount,source,reason,notes,created_at",
+    user_id: `eq.${currentSession.user.id}`,
+    order: "timestamp.desc",
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
+async function ensureMedicationSeed() {
+  if (medicationSeedChecked) return;
+  await refreshSessionIfNeeded();
+  if (!currentSession) return;
+
+  const today = todayLocalDateString();
+  let medications = await fetchMedicationsCatalog();
+
+  const requiredMedications = [
+    { name: "Lorazepam", active_from: today },
+    { name: "Atorvastatina", active_from: today },
+  ];
+
+  const existingByName = new Map(medications.map((med) => [med.name.toLowerCase(), med]));
+  const missingMedications = requiredMedications.filter((med) => !existingByName.has(med.name.toLowerCase()));
+
+  if (missingMedications.length > 0) {
+    const rows = missingMedications.map((med) => ({
+      user_id: currentSession.user.id,
+      name: med.name,
+      active_from: med.active_from,
+    }));
+    await apiFetch(`${SUPABASE_URL}/rest/v1/medications`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "return=representation" }),
+      body: JSON.stringify(rows),
+    });
+    medications = await fetchMedicationsCatalog();
+  }
+
+  const byName = new Map(medications.map((med) => [med.name.toLowerCase(), med]));
+  const plans = await fetchMedicationPlans();
+  const planExists = (medicationId, type, timeWindow) =>
+    plans.some(
+      (plan) =>
+        Number(plan.medication_id) === Number(medicationId) &&
+        plan.type === type &&
+        ((plan.time_window || null) === (timeWindow || null)) &&
+        (plan.active_to || null) === null
+    );
+
+  const lorazepam = byName.get("lorazepam");
+  const atorvastatina = byName.get("atorvastatina");
+  const rows = [];
+
+  if (lorazepam && !planExists(lorazepam.id, "scheduled", "morning")) {
+    rows.push({
+      user_id: currentSession.user.id,
+      medication_id: lorazepam.id,
+      type: "scheduled",
+      frequency: "daily",
+      time_window: "morning",
+      active_from: today,
+    });
+  }
+  if (lorazepam && !planExists(lorazepam.id, "prn", null)) {
+    rows.push({
+      user_id: currentSession.user.id,
+      medication_id: lorazepam.id,
+      type: "prn",
+      active_from: today,
+    });
+  }
+  if (atorvastatina && !planExists(atorvastatina.id, "scheduled", "morning")) {
+    rows.push({
+      user_id: currentSession.user.id,
+      medication_id: atorvastatina.id,
+      type: "scheduled",
+      frequency: "daily",
+      time_window: "morning",
+      active_from: today,
+    });
+  }
+
+  if (rows.length > 0) {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/medication_plans`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify(rows),
+    });
+  }
+
+  medicationSeedChecked = true;
+}
+
+function refreshMedicationHistory() {
+  const { intakes, medicationById } = medicationCache;
+  const medicationFilter = medHistoryMedication.value;
+  const sourceFilter = medHistorySource.value;
+  const fromDate = medHistoryFrom.value;
+  const toDate = medHistoryTo.value;
+
+  const filtered = intakes.filter((item) => {
+    const itemDate = isoToLocalDateString(item.timestamp);
+    if (medicationFilter && String(item.medication_id) !== String(medicationFilter)) return false;
+    if (sourceFilter && item.source !== sourceFilter) return false;
+    if (fromDate && itemDate < fromDate) return false;
+    if (toDate && itemDate > toDate) return false;
+    return true;
+  });
+
+  renderMedicationHistory(filtered, medicationById);
+}
+
+async function refreshMedications() {
+  await ensureMedicationSeed();
+
+  const [medicationsAll, plansAll, intakes] = await Promise.all([
+    fetchMedicationsCatalog(),
+    fetchMedicationPlans(),
+    fetchMedicationIntakes(),
+  ]);
+
+  const today = todayLocalDateString();
+  const medicationById = new Map(medicationsAll.map((med) => [Number(med.id), med]));
+  const activeMedications = medicationsAll.filter((med) => isActiveOnDate(med, today));
+  const activeMedicationIds = new Set(activeMedications.map((med) => Number(med.id)));
+  const activePlans = plansAll.filter(
+    (plan) => activeMedicationIds.has(Number(plan.medication_id)) && isActiveOnDate(plan, today)
+  );
+  const plansById = new Map(activePlans.map((plan) => [Number(plan.id), plan]));
+
+  const todayScheduledByPlan = new Map();
+  const latestExtraByPlan = new Map();
+
+  for (const intake of intakes) {
+    const planId = intake.plan_id == null ? null : Number(intake.plan_id);
+    if (planId == null || !plansById.has(planId)) continue;
+
+    if (intake.source === "scheduled" && isoToLocalDateString(intake.timestamp) === today) {
+      const prev = todayScheduledByPlan.get(planId);
+      if (!prev || prev.timestamp < intake.timestamp) todayScheduledByPlan.set(planId, intake);
+    }
+
+    if (intake.source === "extra") {
+      const prev = latestExtraByPlan.get(planId);
+      if (!prev || prev.timestamp < intake.timestamp) latestExtraByPlan.set(planId, intake);
+    }
+  }
+
+  medicationCache = {
+    medications: activeMedications,
+    plans: activePlans,
+    plansById,
+    medicationById,
+    latestScheduledTodayByPlan: todayScheduledByPlan,
+    latestExtraByPlan,
+    intakes,
+  };
+
+  populateMedicationFilterOptions(medicationsAll);
+  renderMedicationToday(activePlans, medicationById, todayScheduledByPlan, latestExtraByPlan);
+  refreshMedicationHistory();
+}
+
 async function refreshWeights() {
   const weights = await fetchWeightRecords();
   renderWeightTable(weights);
@@ -464,7 +940,11 @@ async function refreshHabits() {
 }
 
 async function refreshAllData() {
-  const [weightsResult, habitsResult] = await Promise.allSettled([refreshWeights(), refreshHabits()]);
+  const [weightsResult, habitsResult, medicationResult] = await Promise.allSettled([
+    refreshWeights(),
+    refreshHabits(),
+    refreshMedications(),
+  ]);
 
   if (weightsResult.status === "rejected") {
     setStatus(`Error en peso: ${weightsResult.reason.message}`);
@@ -487,7 +967,26 @@ async function refreshAllData() {
     }
   }
 
-  if (weightsResult.status === "fulfilled" && habitsResult.status === "fulfilled") {
+  if (medicationResult.status === "rejected") {
+    const detail = medicationResult.reason.message || "error desconocido";
+    const missingTables =
+      detail.includes('relation "medications" does not exist') ||
+      detail.includes('relation "medication_plans" does not exist') ||
+      detail.includes('relation "medication_intakes" does not exist');
+
+    if (missingTables) {
+      setStatus("Falta crear tablas de medicaciones en Supabase. Ejecuta supabase_medications.sql.");
+      resetMedicationUI();
+    } else {
+      setStatus(`Error en medicaciones: ${detail}`);
+    }
+  }
+
+  if (
+    weightsResult.status === "fulfilled" &&
+    habitsResult.status === "fulfilled" &&
+    medicationResult.status === "fulfilled"
+  ) {
     setStatus("");
   }
 }
@@ -787,6 +1286,106 @@ async function upsertHabitStatus(habitId, status) {
   }
 }
 
+async function handleTakeScheduledMedication(planId) {
+  const ok = await ensureAuthenticated("Inicia sesion para registrar medicaciones.");
+  if (!ok) return;
+
+  const plan = medicationCache.plansById.get(Number(planId));
+  if (!plan) return;
+
+  const existing = medicationCache.latestScheduledTodayByPlan.get(Number(planId));
+  if (existing) {
+    const allowDuplicate = confirm(
+      `Ya registraste esta dosis hoy a las ${formatTime(
+        existing.timestamp
+      )}. ¿Registrar otra igualmente?`
+    );
+    if (!allowDuplicate) return;
+  }
+
+  await apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes`, {
+    method: "POST",
+    headers: authHeaders({ Prefer: "return=minimal" }),
+    body: JSON.stringify([
+      {
+        user_id: currentSession.user.id,
+        medication_id: plan.medication_id,
+        plan_id: plan.id,
+        timestamp: nowISO(),
+        amount: 1,
+        source: "scheduled",
+      },
+    ]),
+  });
+
+  await refreshMedications();
+  setMessage("Toma programada registrada.");
+}
+
+async function handleUndoScheduledMedication(intakeId) {
+  const ok = await ensureAuthenticated("Inicia sesion para modificar medicaciones.");
+  if (!ok) return;
+
+  const params = new URLSearchParams({
+    id: `eq.${intakeId}`,
+    user_id: `eq.${currentSession.user.id}`,
+  });
+
+  await apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes?${params.toString()}`, {
+    method: "DELETE",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+
+  await refreshMedications();
+  setMessage("Toma programada deshecha.");
+}
+
+async function handleTakeExtraMedication(planId) {
+  const ok = await ensureAuthenticated("Inicia sesion para registrar medicaciones.");
+  if (!ok) return;
+
+  const numericPlanId = Number(planId);
+  const plan = medicationCache.plansById.get(numericPlanId);
+  if (!plan) return;
+
+  const reasonInput = medPrnList.querySelector(`[data-prn-reason-for="${numericPlanId}"]`);
+  const notesInput = medPrnList.querySelector(`[data-prn-notes-for="${numericPlanId}"]`);
+  const reasonValue = reasonInput ? reasonInput.value : "";
+  const notesValue = notesInput ? notesInput.value.trim() : "";
+
+  const previousExtra = medicationCache.latestExtraByPlan.get(numericPlanId);
+  let warning = "";
+  if (previousExtra) {
+    const diffHours = Math.abs(Date.now() - new Date(previousExtra.timestamp).getTime()) / (60 * 60 * 1000);
+    if (diffHours <= EXTRA_SOFT_BRAKE_HOURS) {
+      warning = ` Ultima extra: ${formatTime(previousExtra.timestamp)}.`;
+    }
+  }
+
+  await apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes`, {
+    method: "POST",
+    headers: authHeaders({ Prefer: "return=minimal" }),
+    body: JSON.stringify([
+      {
+        user_id: currentSession.user.id,
+        medication_id: plan.medication_id,
+        plan_id: plan.id,
+        timestamp: nowISO(),
+        amount: 1,
+        source: "extra",
+        reason: reasonValue || null,
+        notes: notesValue || null,
+      },
+    ]),
+  });
+
+  await refreshMedications();
+  setMessage(`Toma extra registrada.${warning}`);
+}
+
 function bindEvents() {
   loginBtn.addEventListener("click", async (event) => {
     event.preventDefault();
@@ -889,6 +1488,58 @@ function bindEvents() {
     }
   });
 
+  medScheduledList.addEventListener("click", async (event) => {
+    const takeBtn = event.target.closest('button[data-med-action="take-scheduled"]');
+    if (takeBtn) {
+      try {
+        await handleTakeScheduledMedication(takeBtn.dataset.planId);
+      } catch (error) {
+        setMessage(`No se pudo registrar la toma: ${error.message}`);
+      }
+      return;
+    }
+
+    const undoBtn = event.target.closest('button[data-med-action="undo-scheduled"]');
+    if (undoBtn) {
+      try {
+        await handleUndoScheduledMedication(undoBtn.dataset.intakeId);
+      } catch (error) {
+        setMessage(`No se pudo deshacer: ${error.message}`);
+      }
+    }
+  });
+
+  medPrnList.addEventListener("click", async (event) => {
+    const extraBtn = event.target.closest('button[data-med-action="take-extra"]');
+    if (!extraBtn) return;
+
+    try {
+      await handleTakeExtraMedication(extraBtn.dataset.planId);
+    } catch (error) {
+      setMessage(`No se pudo registrar la extra: ${error.message}`);
+    }
+  });
+
+  medHistoryApply.addEventListener("click", () => {
+    refreshMedicationHistory();
+  });
+
+  medHistoryMedication.addEventListener("change", () => {
+    refreshMedicationHistory();
+  });
+
+  medHistorySource.addEventListener("change", () => {
+    refreshMedicationHistory();
+  });
+
+  medHistoryFrom.addEventListener("change", () => {
+    refreshMedicationHistory();
+  });
+
+  medHistoryTo.addEventListener("change", () => {
+    refreshMedicationHistory();
+  });
+
   window.addEventListener("error", (event) => {
     const detail = event && event.message ? event.message : "Error de JavaScript.";
     setStatus(detail);
@@ -896,7 +1547,10 @@ function bindEvents() {
 }
 
 async function init() {
-  habitDateInput.value = todayLocalDateString();
+  const today = todayLocalDateString();
+  habitDateInput.value = today;
+  medHistoryFrom.value = addDaysToDateString(today, -14);
+  medHistoryTo.value = today;
   updateNow();
   setInterval(updateNow, 1000);
   bindEvents();

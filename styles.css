@@ -58,6 +58,11 @@ h2 {
   font-size: clamp(1.5rem, 2vw, 2rem);
 }
 
+h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
 .subtitle {
   margin: 0;
   color: var(--muted);
@@ -98,7 +103,8 @@ input[type="number"],
 input[type="email"],
 input[type="password"],
 input[type="text"],
-input[type="date"] {
+input[type="date"],
+select {
   border: 1px solid var(--stroke);
   border-radius: 14px;
   padding: 12px 14px;
@@ -464,6 +470,118 @@ details[open] summary::before {
   font-size: 0.95rem;
 }
 
+.empty-message {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.med-block {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.med-list {
+  display: grid;
+  gap: 12px;
+}
+
+.med-item {
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 14px;
+  background: #fff;
+  display: grid;
+  gap: 10px;
+}
+
+.med-item-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.med-name {
+  font-weight: 700;
+  font-size: 1.06rem;
+}
+
+.med-meta {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.med-taken {
+  color: #296e66;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.med-warning {
+  color: #a14f1e;
+  font-size: 0.9rem;
+}
+
+.med-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.med-actions .primary,
+.med-actions .secondary {
+  min-width: 220px;
+}
+
+.med-extra-fields {
+  display: grid;
+  grid-template-columns: 220px 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.med-history-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.med-history-day {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.med-history-day-title {
+  font-weight: 700;
+}
+
+.med-history-events {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.med-history-events li {
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.med-filters {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -503,6 +621,11 @@ details[open] summary::before {
   .tools,
   .tool-group {
     width: 100%;
+  }
+
+  .med-filters,
+  .med-extra-fields {
+    grid-template-columns: 1fr;
   }
 
   button,

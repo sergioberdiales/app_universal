@@ -49,6 +49,7 @@
           <nav class="tab-nav" id="mainTabs" aria-label="Secciones de la app">
             <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">Habitos</button>
             <button type="button" class="tab-btn" data-tab-target="weightPanel">Peso</button>
+            <button type="button" class="tab-btn" data-tab-target="medicationPanel">Medicaciones</button>
           </nav>
         </section>
 
@@ -161,11 +162,68 @@
             </details>
           </section>
         </section>
+
+        <section id="medicationPanel" class="panel hidden">
+          <section class="card">
+            <div class="table-header">
+              <h2>Medicaciones de hoy</h2>
+              <span id="medTodayBadge" class="chip">0 programadas pendientes</span>
+            </div>
+
+            <div class="med-block">
+              <h3>Programadas</h3>
+              <div id="medScheduledList" class="med-list">
+                <div class="empty-message">No hay medicaciones programadas activas.</div>
+              </div>
+            </div>
+
+            <div class="med-block">
+              <h3>A demanda (extra)</h3>
+              <div id="medPrnList" class="med-list">
+                <div class="empty-message">No hay medicaciones a demanda activas.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="table-header">
+              <h2>Historial</h2>
+            </div>
+            <div class="med-filters">
+              <label class="field">
+                <span>Medicacion</span>
+                <select id="medHistoryMedication">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Tipo</span>
+                <select id="medHistorySource">
+                  <option value="">Todos</option>
+                  <option value="scheduled">Programada</option>
+                  <option value="extra">Extra</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Desde</span>
+                <input id="medHistoryFrom" type="date" />
+              </label>
+              <label class="field">
+                <span>Hasta</span>
+                <input id="medHistoryTo" type="date" />
+              </label>
+              <button id="medHistoryApply" class="ghost" type="button">Aplicar filtros</button>
+            </div>
+            <div id="medHistoryList" class="med-history-list">
+              <div class="empty-message">Aun no hay eventos de medicacion.</div>
+            </div>
+          </section>
+        </section>
       </div>
 
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=tabs-20260215"></script>
+    <script src="app.js?v=medications-20260215"></script>
   </body>
 </html>

@@ -795,34 +795,28 @@ async function ensureMedicationSeed() {
   const lorazepam = byName.get("lorazepam");
   const atorvastatina = byName.get("atorvastatina");
   const rows = [];
+  const buildPlanRow = ({ medicationId, type, frequency = null, timeWindow = null }) => ({
+    user_id: currentSession.user.id,
+    medication_id: medicationId,
+    type,
+    frequency,
+    time_window: timeWindow,
+    target_time: null,
+    tolerance_minutes: null,
+    active_from: today,
+    active_to: null,
+  });
 
   if (lorazepam && !planExists(lorazepam.id, "scheduled", "morning")) {
-    rows.push({
-      user_id: currentSession.user.id,
-      medication_id: lorazepam.id,
-      type: "scheduled",
-      frequency: "daily",
-      time_window: "morning",
-      active_from: today,
-    });
+    rows.push(buildPlanRow({ medicationId: lorazepam.id, type: "scheduled", frequency: "daily", timeWindow: "morning" }));
   }
   if (lorazepam && !planExists(lorazepam.id, "prn", null)) {
-    rows.push({
-      user_id: currentSession.user.id,
-      medication_id: lorazepam.id,
-      type: "prn",
-      active_from: today,
-    });
+    rows.push(buildPlanRow({ medicationId: lorazepam.id, type: "prn" }));
   }
   if (atorvastatina && !planExists(atorvastatina.id, "scheduled", "morning")) {
-    rows.push({
-      user_id: currentSession.user.id,
-      medication_id: atorvastatina.id,
-      type: "scheduled",
-      frequency: "daily",
-      time_window: "morning",
-      active_from: today,
-    });
+    rows.push(
+      buildPlanRow({ medicationId: atorvastatina.id, type: "scheduled", frequency: "daily", timeWindow: "morning" })
+    );
   }
 
   if (rows.length > 0) {

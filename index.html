@@ -183,6 +183,40 @@
                 <div class="empty-message">No hay medicaciones a demanda activas.</div>
               </div>
             </div>
+
+            <div class="med-block">
+              <h3>Nuevo tratamiento</h3>
+              <div class="med-create-form">
+                <label class="field">
+                  <span>Medicacion</span>
+                  <input id="medCreateName" type="text" placeholder="Ej: Ibuprofeno" />
+                </label>
+                <label class="field">
+                  <span>Tipo</span>
+                  <select id="medCreateType">
+                    <option value="scheduled">Programada</option>
+                    <option value="prn">A demanda (extra)</option>
+                  </select>
+                </label>
+                <label class="field" id="medCreateWindowField">
+                  <span>Ventana</span>
+                  <select id="medCreateWindow">
+                    <option value="morning">Manana</option>
+                    <option value="afternoon">Tarde</option>
+                    <option value="night">Noche</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Inicio</span>
+                  <input id="medCreateStart" type="date" />
+                </label>
+                <label class="field med-create-notes">
+                  <span>Notas (opcional)</span>
+                  <input id="medCreateNotes" type="text" placeholder="Ej: despues de comer" />
+                </label>
+                <button id="medCreateSubmit" class="primary" type="button">Guardar tratamiento</button>
+              </div>
+            </div>
           </section>
 
           <section class="card">
@@ -224,6 +258,6 @@
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=medications-fix-20260215"></script>
+    <script src="app.js?v=medications-ui-fix-20260215"></script>
   </body>
 </html>

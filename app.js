@@ -52,10 +52,18 @@ const medHistoryFrom = document.getElementById("medHistoryFrom");
 const medHistoryTo = document.getElementById("medHistoryTo");
 const medHistoryApply = document.getElementById("medHistoryApply");
 const medHistoryList = document.getElementById("medHistoryList");
+const medCreateName = document.getElementById("medCreateName");
+const medCreateType = document.getElementById("medCreateType");
+const medCreateWindowField = document.getElementById("medCreateWindowField");
+const medCreateWindow = document.getElementById("medCreateWindow");
+const medCreateStart = document.getElementById("medCreateStart");
+const medCreateNotes = document.getElementById("medCreateNotes");
+const medCreateSubmit = document.getElementById("medCreateSubmit");
 
 let currentSession = loadSession();
 let medicationSeedChecked = false;
 let medicationCache = {
+  medicationsAll: [],
   medications: [],
   plans: [],
   plansById: new Map(),
@@ -426,6 +434,7 @@ function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesC
 
 function resetMedicationUI() {
   medicationCache = {
+    medicationsAll: [],
     medications: [],
     plans: [],
     plansById: new Map(),
@@ -489,14 +498,18 @@ function renderMedicationToday(plans, medicationsById, todayScheduledByPlan, lat
                 : '<div class="med-meta">Pendiente de registrar hoy.</div>'
             }
             <div class="med-actions">
-              <button
-                type="button"
-                class="primary"
-                data-med-action="take-scheduled"
-                data-plan-id="${plan.id}"
-              >
-                ${takenToday ? "Registrar otra igualmente" : "Marcar como tomada"}
-              </button>
+              ${
+                takenToday
+                  ? ""
+                  : `<button
+                      type="button"
+                      class="primary"
+                      data-med-action="take-scheduled"
+                      data-plan-id="${plan.id}"
+                    >
+                      Marcar como tomada
+                    </button>`
+              }
               ${
                 takenToday
                   ? `<button
@@ -886,6 +899,7 @@ async function refreshMedications() {
   }
 
   medicationCache = {
+    medicationsAll,
     medications: activeMedications,
     plans: activePlans,
     plansById,
@@ -898,6 +912,114 @@ async function refreshMedications() {
   populateMedicationFilterOptions(medicationsAll);
   renderMedicationToday(activePlans, medicationById, todayScheduledByPlan, latestExtraByPlan);
   refreshMedicationHistory();
+}
+
+function updateMedicationCreateVisibility() {
+  const isScheduled = medCreateType.value === "scheduled";
+  medCreateWindowField.classList.toggle("hidden", !isScheduled);
+}
+
+async function findMedicationByName(name) {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) return null;
+  const cached = medicationCache.medicationsAll.find((med) => med.name.toLowerCase() === normalized);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    select: "id,name,active_from,active_to",
+    user_id: `eq.${currentSession.user.id}`,
+    name: `ilike.${name}`,
+    limit: "5",
+  });
+  const matches = await apiFetch(`${SUPABASE_URL}/rest/v1/medications?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+  return matches.find((med) => med.name.toLowerCase() === normalized) || null;
+}
+
+async function handleCreateMedicationPlan() {
+  const ok = await ensureAuthenticated("Inicia sesion para crear tratamientos.");
+  if (!ok) return;
+
+  const name = medCreateName.value.trim();
+  const type = medCreateType.value;
+  const windowValue = medCreateWindow.value;
+  const start = medCreateStart.value || todayLocalDateString();
+  const notes = medCreateNotes.value.trim();
+
+  if (!name) {
+    setMessage("Indica el nombre de la medicacion.");
+    return;
+  }
+
+  medCreateSubmit.disabled = true;
+  try {
+    let medication = await findMedicationByName(name);
+    if (!medication) {
+      const inserted = await apiFetch(`${SUPABASE_URL}/rest/v1/medications`, {
+        method: "POST",
+        headers: authHeaders({ Prefer: "return=representation" }),
+        body: JSON.stringify([
+          {
+            user_id: currentSession.user.id,
+            name,
+            notes: notes || null,
+            active_from: start,
+            active_to: null,
+          },
+        ]),
+      });
+      medication = inserted[0];
+    }
+
+    const existingPlans = medicationCache.plans.filter(
+      (plan) =>
+        Number(plan.medication_id) === Number(medication.id) &&
+        plan.type === type &&
+        (type === "prn" || plan.time_window === windowValue) &&
+        !plan.active_to
+    );
+    if (existingPlans.length > 0) {
+      setMessage("Ya existe un plan activo igual para esta medicacion.");
+      return;
+    }
+
+    await apiFetch(`${SUPABASE_URL}/rest/v1/medication_plans`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify([
+        {
+          user_id: currentSession.user.id,
+          medication_id: medication.id,
+          type,
+          frequency: type === "scheduled" ? "daily" : null,
+          time_window: type === "scheduled" ? windowValue : null,
+          target_time: null,
+          tolerance_minutes: null,
+          active_from: start,
+          active_to: null,
+        },
+      ]),
+    });
+
+    medCreateName.value = "";
+    medCreateNotes.value = "";
+    medCreateType.value = "scheduled";
+    medCreateWindow.value = "morning";
+    medCreateStart.value = todayLocalDateString();
+    updateMedicationCreateVisibility();
+
+    await refreshMedications();
+    setMessage("Tratamiento guardado.");
+  } catch (error) {
+    setMessage(`No se pudo guardar el tratamiento: ${error.message}`);
+  } finally {
+    medCreateSubmit.disabled = false;
+  }
 }
 
 async function refreshWeights() {
@@ -1534,6 +1656,14 @@ function bindEvents() {
     refreshMedicationHistory();
   });
 
+  medCreateType.addEventListener("change", () => {
+    updateMedicationCreateVisibility();
+  });
+
+  medCreateSubmit.addEventListener("click", async () => {
+    await handleCreateMedicationPlan();
+  });
+
   window.addEventListener("error", (event) => {
     const detail = event && event.message ? event.message : "Error de JavaScript.";
     setStatus(detail);
@@ -1545,6 +1675,8 @@ async function init() {
   habitDateInput.value = today;
   medHistoryFrom.value = addDaysToDateString(today, -14);
   medHistoryTo.value = today;
+  medCreateStart.value = today;
+  updateMedicationCreateVisibility();
   updateNow();
   setInterval(updateNow, 1000);
   bindEvents();

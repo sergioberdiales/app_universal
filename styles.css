@@ -585,6 +585,17 @@ details[open] summary::before {
   align-items: end;
 }
 
+.med-create-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.med-create-notes {
+  grid-column: span 2;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -632,7 +643,8 @@ details[open] summary::before {
   }
 
   .med-filters,
-  .med-extra-fields {
+  .med-extra-fields,
+  .med-create-form {
     grid-template-columns: 1fr;
   }
 

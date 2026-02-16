@@ -59,6 +59,7 @@ const medCreateWindow = document.getElementById("medCreateWindow");
 const medCreateStart = document.getElementById("medCreateStart");
 const medCreateNotes = document.getElementById("medCreateNotes");
 const medCreateSubmit = document.getElementById("medCreateSubmit");
+const medCreateDetails = document.getElementById("medCreateDetails");
 
 let currentSession = loadSession();
 let medicationSeedChecked = false;
@@ -1012,6 +1013,7 @@ async function handleCreateMedicationPlan() {
     medCreateWindow.value = "morning";
     medCreateStart.value = todayLocalDateString();
     updateMedicationCreateVisibility();
+    if (medCreateDetails) medCreateDetails.open = false;
 
     await refreshMedications();
     setMessage("Tratamiento guardado.");

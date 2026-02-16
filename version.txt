@@ -1,1 +1,1 @@
-build=2026-02-15-medications-ux-create-form
+build=2026-02-15-medications-create-collapsed

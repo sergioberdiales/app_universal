@@ -21,7 +21,31 @@
             <h1>Registro Personal</h1>
             <p id="appDate" class="hero-date">-</p>
           </div>
+          <div id="headerMenu" class="header-menu hidden">
+            <button id="menuToggle" class="ghost menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false">
+              <span aria-hidden="true">☰</span>
+            </button>
+            <div id="headerMenuPanel" class="menu-panel hidden" role="menu" aria-label="Menu principal">
+              <button class="menu-item" type="button" role="menuitem" data-menu-action="logout">Salir</button>
+              <button class="menu-item" type="button" role="menuitem" data-menu-action="export">Exportar datos</button>
+              <button class="menu-item" type="button" role="menuitem" data-menu-action="settings">Configuracion</button>
+            </div>
+          </div>
         </div>
+        <nav class="tab-nav hidden" id="mainTabs" aria-label="Secciones de la app">
+          <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">
+            <span class="tab-label">Habitos</span>
+            <span class="tab-inline" id="tabHabitsProgress">0/0</span>
+          </button>
+          <button type="button" class="tab-btn" data-tab-target="weightPanel">
+            <span class="tab-label">Peso</span>
+          </button>
+          <button type="button" class="tab-btn" data-tab-target="medicationPanel">
+            <span class="tab-label">Medicaciones</span>
+            <span id="tabMedicationDot" class="med-dot is-red" aria-hidden="true"></span>
+            <span id="tabMedicationStatusText" class="sr-only">Sin registros</span>
+          </button>
+        </nav>
       </header>
 
       <div id="estadoApp" class="status-banner"></div>
@@ -47,31 +71,6 @@
       </section>
 
       <div id="zonaPrivada" class="hidden">
-        <section class="card nav-card" id="sessionCard">
-          <div class="header-dashboard" aria-label="Resumen de hoy">
-            <button type="button" class="dashboard-item" data-tab-target="todayPanel">
-              <span class="dashboard-label">Habitos</span>
-              <span class="dashboard-value pending" id="dashHabits">0/0</span>
-            </button>
-            <button type="button" class="dashboard-item" data-tab-target="weightPanel">
-              <span class="dashboard-label">Peso</span>
-              <span class="dashboard-value pending" id="dashWeight">Pendiente</span>
-            </button>
-            <button type="button" class="dashboard-item" data-tab-target="medicationPanel">
-              <span class="dashboard-label">Medicaciones</span>
-              <span class="dashboard-value pending" id="dashMeds">Pendiente</span>
-            </button>
-          </div>
-          <div class="nav-row">
-            <nav class="tab-nav" id="mainTabs" aria-label="Secciones de la app">
-              <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">Habitos</button>
-              <button type="button" class="tab-btn" data-tab-target="weightPanel">Peso</button>
-              <button type="button" class="tab-btn" data-tab-target="medicationPanel">Medicaciones</button>
-            </nav>
-            <button id="logout" class="ghost logout-btn" type="button">Salir</button>
-          </div>
-        </section>
-
         <section id="todayPanel" class="panel is-active">
           <section class="card">
             <div class="table-header">
@@ -279,6 +278,6 @@
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=header-dashboard-20260222"></script>
+    <script src="app.js?v=header-menu-tabs-20260222"></script>
   </body>
 </html>

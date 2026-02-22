@@ -10,7 +10,13 @@ const zonaPrivada = document.getElementById("zonaPrivada");
 const estadoApp = document.getElementById("estadoApp");
 const mensaje = document.getElementById("mensaje");
 const appDate = document.getElementById("appDate");
-const sessionCard = document.getElementById("sessionCard");
+const mainTabs = document.getElementById("mainTabs");
+const tabHabitsProgress = document.getElementById("tabHabitsProgress");
+const tabMedicationDot = document.getElementById("tabMedicationDot");
+const tabMedicationStatusText = document.getElementById("tabMedicationStatusText");
+const headerMenu = document.getElementById("headerMenu");
+const menuToggle = document.getElementById("menuToggle");
+const headerMenuPanel = document.getElementById("headerMenuPanel");
 
 const todayPanel = document.getElementById("todayPanel");
 const weightPanel = document.getElementById("weightPanel");
@@ -24,7 +30,6 @@ const panelMap = {
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const loginBtn = document.getElementById("login");
-const logoutBtn = document.getElementById("logout");
 
 const pesoInput = document.getElementById("peso");
 const fechaActual = document.getElementById("fechaActual");
@@ -61,20 +66,15 @@ const medCreateStart = document.getElementById("medCreateStart");
 const medCreateNotes = document.getElementById("medCreateNotes");
 const medCreateSubmit = document.getElementById("medCreateSubmit");
 const medCreateDetails = document.getElementById("medCreateDetails");
-const dashHabits = document.getElementById("dashHabits");
-const dashWeight = document.getElementById("dashWeight");
-const dashMeds = document.getElementById("dashMeds");
 
 let currentSession = loadSession();
 let medicationSeedChecked = false;
-let dashboardState = {
+let tabStatusState = {
   habitsDone: 0,
   habitsTotal: 0,
-  weightText: "Pendiente",
-  weightComplete: false,
-  medsText: "Pendiente",
-  medsComplete: false,
+  medicationStatus: "none",
 };
+let isHeaderMenuOpen = false;
 let medicationCache = {
   medicationsAll: [],
   medications: [],
@@ -178,31 +178,47 @@ function setHeaderDate(date = new Date()) {
   appDate.textContent = value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function setDashboardValue(node, text, complete) {
-  if (!node) return;
-  node.textContent = text;
-  node.classList.toggle("complete", !!complete);
-  node.classList.toggle("pending", !complete);
+function renderTabStatus() {
+  if (tabHabitsProgress) {
+    tabHabitsProgress.textContent = `${tabStatusState.habitsDone}/${tabStatusState.habitsTotal}`;
+  }
+
+  if (tabMedicationDot) {
+    tabMedicationDot.classList.remove("is-green", "is-orange", "is-red");
+    let label = "Sin registros";
+    if (tabStatusState.medicationStatus === "complete") tabMedicationDot.classList.add("is-green");
+    else if (tabStatusState.medicationStatus === "partial") tabMedicationDot.classList.add("is-orange");
+    else tabMedicationDot.classList.add("is-red");
+    if (tabStatusState.medicationStatus === "complete") label = "Completado";
+    if (tabStatusState.medicationStatus === "partial") label = "Incompleto";
+    tabMedicationDot.title = `Medicaciones: ${label}`;
+  }
+
+  if (tabMedicationStatusText) {
+    if (tabStatusState.medicationStatus === "complete") tabMedicationStatusText.textContent = "Completado";
+    else if (tabStatusState.medicationStatus === "partial") tabMedicationStatusText.textContent = "Incompleto";
+    else tabMedicationStatusText.textContent = "Sin registros";
+  }
 }
 
-function renderDashboard() {
-  const habitsComplete =
-    dashboardState.habitsTotal > 0 && dashboardState.habitsDone === dashboardState.habitsTotal;
-  setDashboardValue(dashHabits, `${dashboardState.habitsDone}/${dashboardState.habitsTotal}`, habitsComplete);
-  setDashboardValue(dashWeight, dashboardState.weightText, dashboardState.weightComplete);
-  setDashboardValue(dashMeds, dashboardState.medsText, dashboardState.medsComplete);
-}
-
-function resetDashboardState() {
-  dashboardState = {
+function resetTabStatus() {
+  tabStatusState = {
     habitsDone: 0,
     habitsTotal: 0,
-    weightText: "Pendiente",
-    weightComplete: false,
-    medsText: "Pendiente",
-    medsComplete: false,
+    medicationStatus: "none",
   };
-  renderDashboard();
+  renderTabStatus();
+}
+
+function setHeaderMenuOpen(nextOpen) {
+  isHeaderMenuOpen = !!nextOpen;
+  if (!headerMenuPanel || !menuToggle) return;
+  headerMenuPanel.classList.toggle("hidden", !isHeaderMenuOpen);
+  menuToggle.setAttribute("aria-expanded", String(isHeaderMenuOpen));
+}
+
+function closeHeaderMenu() {
+  setHeaderMenuOpen(false);
 }
 
 function getSelectedHabitDate() {
@@ -300,11 +316,12 @@ function setActiveTab(tabId) {
     panel.classList.toggle("is-active", active);
   }
 
-  const targetsRoot = sessionCard || document;
-  const tabButtons = targetsRoot.querySelectorAll("button[data-tab-target]");
-  for (const button of tabButtons) {
-    const isTarget = button.dataset.tabTarget === targetId;
-    button.classList.toggle("is-active", isTarget);
+  if (mainTabs) {
+    const tabButtons = mainTabs.querySelectorAll("button[data-tab-target]");
+    for (const button of tabButtons) {
+      const isTarget = button.dataset.tabTarget === targetId;
+      button.classList.toggle("is-active", isTarget);
+    }
   }
 
   setPreferredTab(targetId);
@@ -501,6 +518,11 @@ function resetMedicationUI() {
   medPrnList.innerHTML = '<div class="empty-message">No hay medicaciones a demanda activas.</div>';
   medHistoryList.innerHTML = '<div class="empty-message">Aun no hay eventos de medicacion.</div>';
   medHistoryMedication.innerHTML = '<option value="">Todas</option>';
+  tabStatusState = {
+    ...tabStatusState,
+    medicationStatus: "none",
+  };
+  renderTabStatus();
 }
 
 function populateMedicationFilterOptions(medications) {
@@ -682,15 +704,18 @@ function renderMedicationHistory(items, medicationsById) {
 function setAuthenticatedUI(isAuthenticated) {
   loginCard.classList.toggle("hidden", isAuthenticated);
   zonaPrivada.classList.toggle("hidden", !isAuthenticated);
+  if (mainTabs) mainTabs.classList.toggle("hidden", !isAuthenticated);
+  if (headerMenu) headerMenu.classList.toggle("hidden", !isAuthenticated);
+  closeHeaderMenu();
 
   if (isAuthenticated) {
     setStatus("");
-    renderDashboard();
+    renderTabStatus();
     return;
   }
 
   setStatus("Inicia sesion para usar la app.");
-  resetDashboardState();
+  resetTabStatus();
   renderWeightTable([]);
   renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
   resetMedicationUI();
@@ -744,6 +769,25 @@ async function fetchHabitChecksUntil(logDate) {
     select: "habit_id,status,log_date",
     user_id: `eq.${currentSession.user.id}`,
     log_date: `lte.${logDate}`,
+    order: "log_date.asc",
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
+async function fetchHabitChecksAll() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = new URLSearchParams({
+    select: "habit_id,status,log_date",
+    user_id: `eq.${currentSession.user.id}`,
     order: "log_date.asc",
   });
 
@@ -957,24 +1001,22 @@ async function refreshMedications() {
   const scheduledDoneCount = scheduledPlans.filter((plan) => todayScheduledByPlan.has(Number(plan.id))).length;
   const scheduledPendingCount = scheduledPlans.length - scheduledDoneCount;
   const activePlanIds = new Set(activePlans.map((plan) => Number(plan.id)));
-  const extraTodayCount = intakes.filter(
+  const intakesTodayCount = intakes.filter(
     (intake) =>
-      intake.source === "extra" &&
       intake.plan_id != null &&
       activePlanIds.has(Number(intake.plan_id)) &&
       isoToLocalDateString(intake.timestamp) === today
   ).length;
 
-  let medsText = "Pendiente";
-  let medsComplete = false;
+  let medicationStatus = "none";
   if (scheduledPlans.length === 0) {
-    medsText = extraTodayCount > 0 ? `${extraTodayCount} extra` : "Sin pauta";
-    medsComplete = extraTodayCount > 0;
+    medicationStatus = intakesTodayCount > 0 ? "complete" : "none";
+  } else if (scheduledDoneCount === 0 && intakesTodayCount === 0) {
+    medicationStatus = "none";
   } else if (scheduledPendingCount === 0) {
-    medsText = extraTodayCount > 0 ? `Completada +${extraTodayCount} extra` : "Completada";
-    medsComplete = true;
+    medicationStatus = "complete";
   } else {
-    medsText = `${scheduledPendingCount} pendientes`;
+    medicationStatus = "partial";
   }
 
   medicationCache = {
@@ -991,12 +1033,11 @@ async function refreshMedications() {
   populateMedicationFilterOptions(medicationsAll);
   renderMedicationToday(activePlans, medicationById, todayScheduledByPlan, latestExtraByPlan);
   refreshMedicationHistory();
-  dashboardState = {
-    ...dashboardState,
-    medsText,
-    medsComplete,
+  tabStatusState = {
+    ...tabStatusState,
+    medicationStatus,
   };
-  renderDashboard();
+  renderTabStatus();
 }
 
 function updateMedicationCreateVisibility() {
@@ -1111,18 +1152,6 @@ async function handleCreateMedicationPlan() {
 async function refreshWeights() {
   const weights = await fetchWeightRecords();
   renderWeightTable(weights);
-
-  const today = todayLocalDateString();
-  const todayWeight = weights.find((item) => isoToLocalDateString(item.ts) === today);
-  const hasWeightToday = !!todayWeight;
-  const weightText = hasWeightToday ? `${Number(todayWeight.weight).toFixed(1)} kg` : "Pendiente";
-
-  dashboardState = {
-    ...dashboardState,
-    weightText,
-    weightComplete: hasWeightToday,
-  };
-  renderDashboard();
 }
 
 async function refreshHabits() {
@@ -1166,12 +1195,12 @@ async function refreshHabits() {
     if (Number(habitStatuses.get(today)) === 1) habitsDoneToday += 1;
   }
 
-  dashboardState = {
-    ...dashboardState,
+  tabStatusState = {
+    ...tabStatusState,
     habitsDone: habitsDoneToday,
     habitsTotal: activeHabitsToday.length,
   };
-  renderDashboard();
+  renderTabStatus();
 }
 
 async function refreshAllData() {
@@ -1187,6 +1216,12 @@ async function refreshAllData() {
 
   if (habitsResult.status === "rejected") {
     const detail = habitsResult.reason.message || "error desconocido";
+    tabStatusState = {
+      ...tabStatusState,
+      habitsDone: 0,
+      habitsTotal: 0,
+    };
+    renderTabStatus();
     const missingTables =
       detail.includes('relation "habits" does not exist') ||
       detail.includes('relation "habit_checks" does not exist');
@@ -1393,6 +1428,46 @@ async function handleExportWeights() {
     setMessage("CSV exportado.");
   } catch (error) {
     setMessage(`No se pudo exportar: ${error.message}`);
+  }
+}
+
+async function handleExportAllData() {
+  const ok = await ensureAuthenticated("Inicia sesion para exportar datos.");
+  if (!ok) return;
+
+  try {
+    const [weights, habits, habitChecks, medications, medicationPlans, medicationIntakes] = await Promise.all([
+      fetchWeightRecords(),
+      fetchHabits(),
+      fetchHabitChecksAll(),
+      fetchMedicationsCatalog(),
+      fetchMedicationPlans(),
+      fetchMedicationIntakes(),
+    ]);
+
+    const payload = {
+      exported_at: nowISO(),
+      user_id: currentSession.user.id,
+      weights,
+      habits,
+      habit_checks: habitChecks,
+      medications,
+      medication_plans: medicationPlans,
+      medication_intakes: medicationIntakes,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `registro-personal-${todayLocalDateString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage("Datos exportados.");
+  } catch (error) {
+    setMessage(`No se pudo exportar datos: ${error.message}`);
   }
 }
 
@@ -1633,17 +1708,52 @@ function bindEvents() {
     await handleLogin();
   });
 
-  logoutBtn.addEventListener("click", async () => {
-    await handleLogout();
-  });
-
-  if (sessionCard) {
-    sessionCard.addEventListener("click", (event) => {
+  if (mainTabs) {
+    mainTabs.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-tab-target]");
       if (!button) return;
       setActiveTab(button.dataset.tabTarget);
     });
   }
+
+  if (menuToggle) {
+    menuToggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setHeaderMenuOpen(!isHeaderMenuOpen);
+    });
+  }
+
+  if (headerMenuPanel) {
+    headerMenuPanel.addEventListener("click", async (event) => {
+      const actionButton = event.target.closest("button[data-menu-action]");
+      if (!actionButton) return;
+
+      closeHeaderMenu();
+      const action = actionButton.dataset.menuAction;
+
+      if (action === "logout") {
+        await handleLogout();
+        return;
+      }
+      if (action === "export") {
+        await handleExportAllData();
+        return;
+      }
+      if (action === "settings") {
+        setMessage("Configuracion disponible proximamente.");
+      }
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!isHeaderMenuOpen || !headerMenu) return;
+    if (headerMenu.contains(event.target)) return;
+    closeHeaderMenu();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeHeaderMenu();
+  });
 
   guardarBtn.addEventListener("click", async () => {
     await handleAddWeight();
@@ -1798,7 +1908,7 @@ async function init() {
   updateMedicationCreateVisibility();
   updateNow();
   setInterval(updateNow, 1000);
-  resetDashboardState();
+  resetTabStatus();
   bindEvents();
   setActiveTab(loadPreferredTab());
 

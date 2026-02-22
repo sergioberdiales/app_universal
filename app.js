@@ -9,8 +9,9 @@ const loginCard = document.getElementById("loginCard");
 const zonaPrivada = document.getElementById("zonaPrivada");
 const estadoApp = document.getElementById("estadoApp");
 const mensaje = document.getElementById("mensaje");
+const appDate = document.getElementById("appDate");
+const sessionCard = document.getElementById("sessionCard");
 
-const mainTabs = document.getElementById("mainTabs");
 const todayPanel = document.getElementById("todayPanel");
 const weightPanel = document.getElementById("weightPanel");
 const medicationPanel = document.getElementById("medicationPanel");
@@ -60,9 +61,20 @@ const medCreateStart = document.getElementById("medCreateStart");
 const medCreateNotes = document.getElementById("medCreateNotes");
 const medCreateSubmit = document.getElementById("medCreateSubmit");
 const medCreateDetails = document.getElementById("medCreateDetails");
+const dashHabits = document.getElementById("dashHabits");
+const dashWeight = document.getElementById("dashWeight");
+const dashMeds = document.getElementById("dashMeds");
 
 let currentSession = loadSession();
 let medicationSeedChecked = false;
+let dashboardState = {
+  habitsDone: 0,
+  habitsTotal: 0,
+  weightText: "Pendiente",
+  weightComplete: false,
+  medsText: "Pendiente",
+  medsComplete: false,
+};
 let medicationCache = {
   medicationsAll: [],
   medications: [],
@@ -154,6 +166,45 @@ function reasonLabel(value) {
   return "";
 }
 
+function setHeaderDate(date = new Date()) {
+  if (!appDate) return;
+
+  const formatter = new Intl.DateTimeFormat("es-ES", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+  const value = formatter.format(date);
+  appDate.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function setDashboardValue(node, text, complete) {
+  if (!node) return;
+  node.textContent = text;
+  node.classList.toggle("complete", !!complete);
+  node.classList.toggle("pending", !complete);
+}
+
+function renderDashboard() {
+  const habitsComplete =
+    dashboardState.habitsTotal > 0 && dashboardState.habitsDone === dashboardState.habitsTotal;
+  setDashboardValue(dashHabits, `${dashboardState.habitsDone}/${dashboardState.habitsTotal}`, habitsComplete);
+  setDashboardValue(dashWeight, dashboardState.weightText, dashboardState.weightComplete);
+  setDashboardValue(dashMeds, dashboardState.medsText, dashboardState.medsComplete);
+}
+
+function resetDashboardState() {
+  dashboardState = {
+    habitsDone: 0,
+    habitsTotal: 0,
+    weightText: "Pendiente",
+    weightComplete: false,
+    medsText: "Pendiente",
+    medsComplete: false,
+  };
+  renderDashboard();
+}
+
 function getSelectedHabitDate() {
   const date = habitDateInput.value || todayLocalDateString();
   habitDateInput.value = date;
@@ -175,6 +226,7 @@ function formatDate(iso) {
 
 function updateNow() {
   fechaActual.textContent = formatDate(nowISO());
+  setHeaderDate();
 }
 
 function setMessage(text) {
@@ -248,11 +300,11 @@ function setActiveTab(tabId) {
     panel.classList.toggle("is-active", active);
   }
 
-  if (!mainTabs) return;
-  const tabButtons = mainTabs.querySelectorAll("button[data-tab-target]");
+  const targetsRoot = sessionCard || document;
+  const tabButtons = targetsRoot.querySelectorAll("button[data-tab-target]");
   for (const button of tabButtons) {
-    const active = button.dataset.tabTarget === targetId;
-    button.classList.toggle("is-active", active);
+    const isTarget = button.dataset.tabTarget === targetId;
+    button.classList.toggle("is-active", isTarget);
   }
 
   setPreferredTab(targetId);
@@ -633,10 +685,12 @@ function setAuthenticatedUI(isAuthenticated) {
 
   if (isAuthenticated) {
     setStatus("");
+    renderDashboard();
     return;
   }
 
   setStatus("Inicia sesion para usar la app.");
+  resetDashboardState();
   renderWeightTable([]);
   renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
   resetMedicationUI();
@@ -899,6 +953,30 @@ async function refreshMedications() {
     }
   }
 
+  const scheduledPlans = activePlans.filter((plan) => plan.type === "scheduled");
+  const scheduledDoneCount = scheduledPlans.filter((plan) => todayScheduledByPlan.has(Number(plan.id))).length;
+  const scheduledPendingCount = scheduledPlans.length - scheduledDoneCount;
+  const activePlanIds = new Set(activePlans.map((plan) => Number(plan.id)));
+  const extraTodayCount = intakes.filter(
+    (intake) =>
+      intake.source === "extra" &&
+      intake.plan_id != null &&
+      activePlanIds.has(Number(intake.plan_id)) &&
+      isoToLocalDateString(intake.timestamp) === today
+  ).length;
+
+  let medsText = "Pendiente";
+  let medsComplete = false;
+  if (scheduledPlans.length === 0) {
+    medsText = extraTodayCount > 0 ? `${extraTodayCount} extra` : "Sin pauta";
+    medsComplete = extraTodayCount > 0;
+  } else if (scheduledPendingCount === 0) {
+    medsText = extraTodayCount > 0 ? `Completada +${extraTodayCount} extra` : "Completada";
+    medsComplete = true;
+  } else {
+    medsText = `${scheduledPendingCount} pendientes`;
+  }
+
   medicationCache = {
     medicationsAll,
     medications: activeMedications,
@@ -913,6 +991,12 @@ async function refreshMedications() {
   populateMedicationFilterOptions(medicationsAll);
   renderMedicationToday(activePlans, medicationById, todayScheduledByPlan, latestExtraByPlan);
   refreshMedicationHistory();
+  dashboardState = {
+    ...dashboardState,
+    medsText,
+    medsComplete,
+  };
+  renderDashboard();
 }
 
 function updateMedicationCreateVisibility() {
@@ -1027,11 +1111,25 @@ async function handleCreateMedicationPlan() {
 async function refreshWeights() {
   const weights = await fetchWeightRecords();
   renderWeightTable(weights);
+
+  const today = todayLocalDateString();
+  const todayWeight = weights.find((item) => isoToLocalDateString(item.ts) === today);
+  const hasWeightToday = !!todayWeight;
+  const weightText = hasWeightToday ? `${Number(todayWeight.weight).toFixed(1)} kg` : "Pendiente";
+
+  dashboardState = {
+    ...dashboardState,
+    weightText,
+    weightComplete: hasWeightToday,
+  };
+  renderDashboard();
 }
 
 async function refreshHabits() {
   const logDate = getSelectedHabitDate();
-  const [habits, checksUntilDate] = await Promise.all([fetchHabits(), fetchHabitChecksUntil(logDate)]);
+  const today = todayLocalDateString();
+  const fetchUntilDate = logDate > today ? logDate : today;
+  const [habits, checksUntilDate] = await Promise.all([fetchHabits(), fetchHabitChecksUntil(fetchUntilDate)]);
 
   const selectedStatusByHabit = new Map();
   const statusByHabitDate = new Map();
@@ -1055,6 +1153,25 @@ async function refreshHabits() {
   }
 
   renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesCountByHabit, logDate);
+
+  const activeHabitsToday = habits.filter((habit) => {
+    const createdDate = (habit.created_at || "").slice(0, 10);
+    return !createdDate || createdDate <= today;
+  });
+
+  let habitsDoneToday = 0;
+  for (const habit of activeHabitsToday) {
+    const habitStatuses = statusByHabitDate.get(Number(habit.id));
+    if (!habitStatuses) continue;
+    if (Number(habitStatuses.get(today)) === 1) habitsDoneToday += 1;
+  }
+
+  dashboardState = {
+    ...dashboardState,
+    habitsDone: habitsDoneToday,
+    habitsTotal: activeHabitsToday.length,
+  };
+  renderDashboard();
 }
 
 async function refreshAllData() {
@@ -1520,8 +1637,8 @@ function bindEvents() {
     await handleLogout();
   });
 
-  if (mainTabs) {
-    mainTabs.addEventListener("click", (event) => {
+  if (sessionCard) {
+    sessionCard.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-tab-target]");
       if (!button) return;
       setActiveTab(button.dataset.tabTarget);
@@ -1681,6 +1798,7 @@ async function init() {
   updateMedicationCreateVisibility();
   updateNow();
   setInterval(updateNow, 1000);
+  resetDashboardState();
   bindEvents();
   setActiveTab(loadPreferredTab());
 

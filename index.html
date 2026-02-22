@@ -16,7 +16,12 @@
     <div class="bg"></div>
     <main class="app">
       <header class="hero">
-        <h1>Registro Personal</h1>
+        <div class="hero-top">
+          <div>
+            <h1>Registro Personal</h1>
+            <p id="appDate" class="hero-date">-</p>
+          </div>
+        </div>
       </header>
 
       <div id="estadoApp" class="status-banner"></div>
@@ -43,14 +48,28 @@
 
       <div id="zonaPrivada" class="hidden">
         <section class="card nav-card" id="sessionCard">
-          <div class="top-bar">
-            <button id="logout" class="ghost">Salir</button>
+          <div class="header-dashboard" aria-label="Resumen de hoy">
+            <button type="button" class="dashboard-item" data-tab-target="todayPanel">
+              <span class="dashboard-label">Habitos</span>
+              <span class="dashboard-value pending" id="dashHabits">0/0</span>
+            </button>
+            <button type="button" class="dashboard-item" data-tab-target="weightPanel">
+              <span class="dashboard-label">Peso</span>
+              <span class="dashboard-value pending" id="dashWeight">Pendiente</span>
+            </button>
+            <button type="button" class="dashboard-item" data-tab-target="medicationPanel">
+              <span class="dashboard-label">Medicaciones</span>
+              <span class="dashboard-value pending" id="dashMeds">Pendiente</span>
+            </button>
           </div>
-          <nav class="tab-nav" id="mainTabs" aria-label="Secciones de la app">
-            <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">Habitos</button>
-            <button type="button" class="tab-btn" data-tab-target="weightPanel">Peso</button>
-            <button type="button" class="tab-btn" data-tab-target="medicationPanel">Medicaciones</button>
-          </nav>
+          <div class="nav-row">
+            <nav class="tab-nav" id="mainTabs" aria-label="Secciones de la app">
+              <button type="button" class="tab-btn is-active" data-tab-target="todayPanel">Habitos</button>
+              <button type="button" class="tab-btn" data-tab-target="weightPanel">Peso</button>
+              <button type="button" class="tab-btn" data-tab-target="medicationPanel">Medicaciones</button>
+            </nav>
+            <button id="logout" class="ghost logout-btn" type="button">Salir</button>
+          </div>
         </section>
 
         <section id="todayPanel" class="panel is-active">
@@ -260,6 +279,6 @@
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=medications-create-collapsed-20260215"></script>
+    <script src="app.js?v=header-dashboard-20260222"></script>
   </body>
 </html>

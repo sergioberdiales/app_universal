@@ -45,6 +45,9 @@
             <span id="tabMedicationDot" class="med-dot is-red" aria-hidden="true"></span>
             <span id="tabMedicationStatusText" class="sr-only">Sin registros</span>
           </button>
+          <button type="button" class="tab-btn" data-tab-target="reportsPanel">
+            <span class="tab-label">Informes</span>
+          </button>
         </nav>
       </header>
 
@@ -273,11 +276,33 @@
             </details>
           </section>
         </section>
+
+        <section id="reportsPanel" class="panel hidden">
+          <section class="card">
+            <div class="table-header">
+              <h2>Informes semanales</h2>
+              <button id="reportGenerateNow" class="secondary" type="button">Generar ahora</button>
+            </div>
+            <p class="hint">Se genera automaticamente los lunes a las 08:00 (Europe/Madrid).</p>
+            <div id="reportsList" class="reports-list">
+              <div class="empty-message">Aun no hay informes generados.</div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="table-header">
+              <h2>Detalle del informe</h2>
+            </div>
+            <div id="reportDetail" class="report-detail">
+              <div class="empty-message">Selecciona un informe para ver el detalle.</div>
+            </div>
+          </section>
+        </section>
       </div>
 
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app.js?v=header-menu-tabs-20260222"></script>
+    <script src="app.js?v=weekly-reports-20260222"></script>
   </body>
 </html>

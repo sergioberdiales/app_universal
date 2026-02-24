@@ -3,7 +3,7 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
 const SESSION_KEY = "peso_supabase_session_v1";
 const TAB_KEY = "registro_tab_v1";
-const TAB_IDS = ["todayPanel", "weightPanel", "medicationPanel"];
+const TAB_IDS = ["todayPanel", "weightPanel", "medicationPanel", "reportsPanel"];
 
 const loginCard = document.getElementById("loginCard");
 const zonaPrivada = document.getElementById("zonaPrivada");
@@ -21,10 +21,12 @@ const headerMenuPanel = document.getElementById("headerMenuPanel");
 const todayPanel = document.getElementById("todayPanel");
 const weightPanel = document.getElementById("weightPanel");
 const medicationPanel = document.getElementById("medicationPanel");
+const reportsPanel = document.getElementById("reportsPanel");
 const panelMap = {
   todayPanel,
   weightPanel,
   medicationPanel,
+  reportsPanel,
 };
 
 const emailInput = document.getElementById("email");
@@ -66,6 +68,9 @@ const medCreateStart = document.getElementById("medCreateStart");
 const medCreateNotes = document.getElementById("medCreateNotes");
 const medCreateSubmit = document.getElementById("medCreateSubmit");
 const medCreateDetails = document.getElementById("medCreateDetails");
+const reportsList = document.getElementById("reportsList");
+const reportDetail = document.getElementById("reportDetail");
+const reportGenerateNow = document.getElementById("reportGenerateNow");
 
 let currentSession = loadSession();
 let medicationSeedChecked = false;
@@ -75,6 +80,8 @@ let tabStatusState = {
   medicationStatus: "none",
 };
 let isHeaderMenuOpen = false;
+let reportsCache = [];
+let selectedReportId = null;
 let medicationCache = {
   medicationsAll: [],
   medications: [],
@@ -238,6 +245,30 @@ function formatDate(iso) {
   return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()} ${pad2(
     date.getHours()
   )}:${pad2(date.getMinutes())}`;
+}
+
+function formatDateOnly(dateString) {
+  if (!dateString) return "-";
+  const [year, month, day] = dateString.split("-").map(Number);
+  if (!year || !month || !day) return dateString;
+  return `${pad2(day)}/${pad2(month)}/${year}`;
+}
+
+function formatWeekLabel(startDate, endDate) {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  const monthStart = start.toLocaleDateString("es-ES", { month: "short" }).replace(".", "");
+  const monthEnd = end.toLocaleDateString("es-ES", { month: "short" }).replace(".", "");
+  if (sameMonth) {
+    return `Informe semana ${pad2(start.getDate())}-${pad2(end.getDate())} ${monthEnd} ${end.getFullYear()}`;
+  }
+  return `Informe semana ${pad2(start.getDate())} ${monthStart}-${pad2(end.getDate())} ${monthEnd} ${end.getFullYear()}`;
+}
+
+function percentageLabel(rate) {
+  if (rate == null || Number.isNaN(Number(rate))) return "-";
+  return `${Math.round(Number(rate) * 100)}%`;
 }
 
 function updateNow() {
@@ -701,6 +732,140 @@ function renderMedicationHistory(items, medicationsById) {
   medHistoryList.innerHTML = blocks;
 }
 
+function resetReportsUI() {
+  reportsCache = [];
+  selectedReportId = null;
+  if (reportsList) {
+    reportsList.innerHTML = '<div class="empty-message">Aun no hay informes generados.</div>';
+  }
+  if (reportDetail) {
+    reportDetail.innerHTML = '<div class="empty-message">Selecciona un informe para ver el detalle.</div>';
+  }
+}
+
+function renderReportDetail(report) {
+  if (!reportDetail) return;
+  if (!report) {
+    reportDetail.innerHTML = '<div class="empty-message">Selecciona un informe para ver el detalle.</div>';
+    return;
+  }
+
+  const payload = report.payload_json && typeof report.payload_json === "object" ? report.payload_json : {};
+  const week = payload.week || {};
+  const allTime = payload.all_time || {};
+  const weekHabits = week.habits || {};
+  const weekWeight = week.weight || {};
+  const weekMedication = week.medication || {};
+  const allHabits = allTime.habits || {};
+  const allWeight = allTime.weight || {};
+  const allMedication = allTime.medication || {};
+
+  const weightWeekMean = weekWeight.mean_weight == null ? "-" : `${Number(weekWeight.mean_weight).toFixed(1)} kg`;
+  const weightAllMean =
+    allWeight.mean_weight_all_time == null ? "-" : `${Number(allWeight.mean_weight_all_time).toFixed(1)} kg`;
+  const weightDelta =
+    weekWeight.week_change_mean == null ? "-" : `${Number(weekWeight.week_change_mean).toFixed(1)} kg`;
+  const changeSinceStart =
+    allWeight.change_since_start == null ? "-" : `${Number(allWeight.change_since_start).toFixed(1)} kg`;
+
+  reportDetail.innerHTML = `
+    <p class="report-summary">${escapeHtml(report.summary_text || "Sin resumen.")}</p>
+    <div class="report-blocks">
+      <article class="report-block">
+        <div class="report-block-title">Habitos</div>
+        <div class="report-kv">
+          Semana: <b>${percentageLabel(weekHabits.global_rate)}</b> (${Number(weekHabits.total_done || 0)}/${Number(
+            weekHabits.total_target || 0
+          )})<br>
+          Delta vs previa: <b>${
+            weekHabits.delta_rate == null ? "-" : `${Math.round(Number(weekHabits.delta_rate) * 100)}%`
+          }</b><br>
+          Historico: <b>${percentageLabel(allHabits.global_rate)}</b>
+        </div>
+      </article>
+      <article class="report-block">
+        <div class="report-block-title">Peso</div>
+        <div class="report-kv">
+          Media semana: <b>${weightWeekMean}</b><br>
+          Registros semana: <b>${Number(weekWeight.n_measurements || 0)}</b><br>
+          Cambio media: <b>${weightDelta}</b><br>
+          Media historica: <b>${weightAllMean}</b><br>
+          Cambio desde inicio: <b>${changeSinceStart}</b>
+        </div>
+      </article>
+      <article class="report-block">
+        <div class="report-block-title">Medicacion</div>
+        <div class="report-kv">
+          Adherencia semana: <b>${percentageLabel(weekMedication.adherence_rate)}</b> (${Number(
+            weekMedication.days_completed || 0
+          )}/${Number(weekMedication.days_total || 0)})<br>
+          Estado semana: <b>${escapeHtml(weekMedication.status_color || "-")}</b><br>
+          Extras semana: <b>${Number(weekMedication.extra_count_week || 0)}</b><br>
+          Adherencia historica: <b>${percentageLabel(allMedication.adherence_rate_all_time)}</b><br>
+          Extras historico: <b>${Number(allMedication.extra_count_all_time || 0)}</b>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderReportsList() {
+  if (!reportsList) return;
+
+  if (reportsCache.length === 0) {
+    reportsList.innerHTML = '<div class="empty-message">Aun no hay informes generados.</div>';
+    renderReportDetail(null);
+    return;
+  }
+
+  reportsList.innerHTML = reportsCache
+    .map((report) => {
+      const activeClass = Number(report.id) === Number(selectedReportId) ? "is-active" : "";
+      const label = formatWeekLabel(report.week_start, report.week_end);
+      const generated = report.generated_at ? formatDate(report.generated_at) : "-";
+      return `
+        <button type="button" class="report-item ${activeClass}" data-report-id="${report.id}">
+          <div class="report-title">${escapeHtml(label)}</div>
+          <div class="report-preview">${escapeHtml(report.summary_text || "Sin resumen.")}</div>
+          <div class="report-meta">Generado: ${generated}</div>
+        </button>
+      `;
+    })
+    .join("");
+
+  const selected = reportsCache.find((report) => Number(report.id) === Number(selectedReportId)) || reportsCache[0];
+  selectedReportId = selected ? Number(selected.id) : null;
+  renderReportDetail(selected || null);
+}
+
+async function fetchWeeklyReports() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = new URLSearchParams({
+    select: "id,generated_at,week_start,week_end,payload_json,summary_text,created_at",
+    user_id: `eq.${currentSession.user.id}`,
+    order: "week_start.desc",
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/weekly_reports?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
+async function refreshReports() {
+  const reports = await fetchWeeklyReports();
+  reportsCache = reports;
+  if (!reportsCache.some((report) => Number(report.id) === Number(selectedReportId))) {
+    selectedReportId = reportsCache.length > 0 ? Number(reportsCache[0].id) : null;
+  }
+  renderReportsList();
+}
+
 function setAuthenticatedUI(isAuthenticated) {
   loginCard.classList.toggle("hidden", isAuthenticated);
   zonaPrivada.classList.toggle("hidden", !isAuthenticated);
@@ -719,6 +884,7 @@ function setAuthenticatedUI(isAuthenticated) {
   renderWeightTable([]);
   renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
   resetMedicationUI();
+  resetReportsUI();
   setActiveTab("todayPanel");
 }
 
@@ -1204,10 +1370,11 @@ async function refreshHabits() {
 }
 
 async function refreshAllData() {
-  const [weightsResult, habitsResult, medicationResult] = await Promise.allSettled([
+  const [weightsResult, habitsResult, medicationResult, reportsResult] = await Promise.allSettled([
     refreshWeights(),
     refreshHabits(),
     refreshMedications(),
+    refreshReports(),
   ]);
 
   if (weightsResult.status === "rejected") {
@@ -1252,10 +1419,23 @@ async function refreshAllData() {
     }
   }
 
+  if (reportsResult.status === "rejected") {
+    const detail = reportsResult.reason.message || "error desconocido";
+    const missingTable = detail.includes('relation "weekly_reports" does not exist');
+
+    if (missingTable) {
+      setStatus("Falta crear tablas de informes en Supabase. Ejecuta supabase_weekly_reports.sql.");
+      resetReportsUI();
+    } else {
+      setStatus(`Error en informes: ${detail}`);
+    }
+  }
+
   if (
     weightsResult.status === "fulfilled" &&
     habitsResult.status === "fulfilled" &&
-    medicationResult.status === "fulfilled"
+    medicationResult.status === "fulfilled" &&
+    reportsResult.status === "fulfilled"
   ) {
     setStatus("");
   }
@@ -1468,6 +1648,34 @@ async function handleExportAllData() {
     setMessage("Datos exportados.");
   } catch (error) {
     setMessage(`No se pudo exportar datos: ${error.message}`);
+  }
+}
+
+async function handleGenerateWeeklyReportNow(force = false) {
+  const ok = await ensureAuthenticated("Inicia sesion para generar informes.");
+  if (!ok) return;
+
+  if (reportGenerateNow) reportGenerateNow.disabled = true;
+  try {
+    const result = await apiFetch(`${SUPABASE_URL}/rest/v1/rpc/generate_weekly_report_now`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "return=representation" }),
+      body: JSON.stringify({ p_force: !!force }),
+    });
+
+    const payload = Array.isArray(result) ? result[0] : result;
+    await refreshReports();
+    setActiveTab("reportsPanel");
+
+    if (payload && payload.generated_new === false) {
+      setMessage("El informe de esa semana ya existia. Se mostro el existente.");
+    } else {
+      setMessage("Informe semanal generado.");
+    }
+  } catch (error) {
+    setMessage(`No se pudo generar el informe: ${error.message}`);
+  } finally {
+    if (reportGenerateNow) reportGenerateNow.disabled = false;
   }
 }
 
@@ -1892,6 +2100,21 @@ function bindEvents() {
   medCreateSubmit.addEventListener("click", async () => {
     await handleCreateMedicationPlan();
   });
+
+  if (reportsList) {
+    reportsList.addEventListener("click", (event) => {
+      const item = event.target.closest("button[data-report-id]");
+      if (!item) return;
+      selectedReportId = Number(item.dataset.reportId);
+      renderReportsList();
+    });
+  }
+
+  if (reportGenerateNow) {
+    reportGenerateNow.addEventListener("click", async () => {
+      await handleGenerateWeeklyReportNow(false);
+    });
+  }
 
   window.addEventListener("error", (event) => {
     const detail = event && event.message ? event.message : "Error de JavaScript.";

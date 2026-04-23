@@ -1,17 +1,17 @@
-const CACHE_NAME = "registro-personal-shell-v1";
+const CACHE_NAME = "registro-personal-shell-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
-  "./pwa.js",
-  "./manifest.webmanifest",
+  "./pwa.js?v=pwa-20260424a",
+  "./manifest.webmanifest?v=pwa-20260424a",
   "./logo_header_v1.png",
-  "./favicon-32.png",
-  "./apple-touch-icon.png",
-  "./icon-192.png",
-  "./icon-512.png",
-  "./icon-512-maskable.png",
+  "./favicon-32.png?v=pwa-20260424a",
+  "./apple-touch-icon.png?v=pwa-20260424a",
+  "./icon-192.png?v=pwa-20260424a",
+  "./icon-512.png?v=pwa-20260424a",
+  "./icon-512-maskable.png?v=pwa-20260424a",
 ];
 
 self.addEventListener("install", (event) => {

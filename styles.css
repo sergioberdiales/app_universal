@@ -58,10 +58,25 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
+  flex-wrap: wrap;
+}
+
+.hero-brand {
+  display: grid;
+  gap: 10px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.hero-logo {
+  display: block;
+  width: clamp(260px, 56vw, 620px);
+  max-width: 100%;
+  height: auto;
 }
 
 .hero-date {
-  margin: 8px 0 0;
+  margin: 0 0 0 4px;
   color: var(--muted);
   font-size: 0.95rem;
   text-transform: capitalize;
@@ -232,6 +247,7 @@ button:disabled {
 
 .header-menu {
   position: relative;
+  margin-left: auto;
 }
 
 .tab-nav {
@@ -820,8 +836,16 @@ details[open] summary::before {
   }
 
   .hero-top {
-    flex-direction: row;
-    justify-content: space-between;
+    flex-direction: column;
+  }
+
+  .hero-logo {
+    width: min(100%, 420px);
+  }
+
+  .header-menu {
+    margin-left: 0;
+    align-self: flex-end;
   }
 
   .tab-nav {

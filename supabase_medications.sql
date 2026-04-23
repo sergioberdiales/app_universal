@@ -171,7 +171,24 @@ create policy medication_intakes_update_own
 on public.medication_intakes
 for update
 using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.medications m
+    where m.id = medication_id
+      and m.user_id = auth.uid()
+  )
+  and (
+    plan_id is null
+    or exists (
+      select 1
+      from public.medication_plans p
+      where p.id = plan_id
+        and p.user_id = auth.uid()
+    )
+  )
+);
 
 drop policy if exists medication_intakes_delete_own on public.medication_intakes;
 create policy medication_intakes_delete_own

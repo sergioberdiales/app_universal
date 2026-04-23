@@ -29,6 +29,14 @@ const panelMap = {
   reportsPanel,
 };
 
+const authForm = document.getElementById("authForm");
+const authTitle = document.getElementById("authTitle");
+const authSubtitle = document.getElementById("authSubtitle");
+const authModeLoginBtn = document.getElementById("authModeLogin");
+const authModeRegisterBtn = document.getElementById("authModeRegister");
+const confirmPasswordField = document.getElementById("confirmPasswordField");
+const confirmPasswordInput = document.getElementById("confirmPassword");
+const authModeHint = document.getElementById("authModeHint");
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const loginBtn = document.getElementById("login");
@@ -73,7 +81,8 @@ const reportDetail = document.getElementById("reportDetail");
 const reportGenerateNow = document.getElementById("reportGenerateNow");
 
 let currentSession = loadSession();
-let medicationSeedChecked = false;
+let authMode = "login";
+let medicationSeedUserId = null;
 let tabStatusState = {
   habitsDone: 0,
   habitsTotal: 0,
@@ -95,6 +104,7 @@ let medicationCache = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EXTRA_SOFT_BRAKE_HOURS = 4;
+const PASSWORD_MIN_LENGTH = 6;
 
 function pad2(value) {
   return String(value).padStart(2, "0");
@@ -312,19 +322,248 @@ function loadSession() {
   }
 }
 
-function saveSession(session) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+function getCurrentUserId() {
+  return currentSession && currentSession.user && currentSession.user.id ? currentSession.user.id : null;
+}
+
+function setSession(session) {
+  const previousUserId = getCurrentUserId();
+  const nextUserId = session && session.user && session.user.id ? session.user.id : null;
+
+  currentSession = session;
+
+  if (session) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+  }
+
+  if (previousUserId !== nextUserId) {
+    medicationSeedUserId = null;
+  }
 }
 
 function clearSession() {
-  currentSession = null;
-  localStorage.removeItem(SESSION_KEY);
+  setSession(null);
 }
 
 function isSessionExpired(session) {
   if (!session || !session.expires_at) return true;
   const now = Math.floor(Date.now() / 1000);
   return now >= session.expires_at - 30;
+}
+
+function buildSessionRecord(payload, fallbackUser = null) {
+  if (!payload || typeof payload !== "object") return null;
+
+  const user = payload.user || fallbackUser || null;
+  if (!payload.access_token || !payload.refresh_token || !user || !user.id) return null;
+
+  const expiresAt = Number(payload.expires_at);
+  const expiresIn = Number(payload.expires_in);
+  const resolvedExpiresAt = Number.isFinite(expiresAt)
+    ? expiresAt
+    : Math.floor(Date.now() / 1000) + (Number.isFinite(expiresIn) ? expiresIn : 3600);
+
+  return {
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token,
+    expires_at: resolvedExpiresAt,
+    user,
+  };
+}
+
+function extractSessionFromAuthResponse(payload) {
+  const directSession = buildSessionRecord(payload);
+  if (directSession) return directSession;
+
+  if (payload && typeof payload === "object" && payload.session) {
+    return buildSessionRecord(payload.session, payload.user || payload.session.user || null);
+  }
+
+  return null;
+}
+
+function createUserScopedParams(params = {}) {
+  return new URLSearchParams({
+    ...params,
+    user_id: `eq.${getCurrentUserId()}`,
+  });
+}
+
+function withCurrentUserId(row) {
+  return {
+    ...row,
+    user_id: getCurrentUserId(),
+  };
+}
+
+function translateAuthError(message) {
+  const detail = String(message || "").toLowerCase();
+  if (detail.includes("invalid login credentials")) return "Email o clave incorrectos.";
+  if (detail.includes("email not confirmed")) return "Confirma tu email antes de iniciar sesion.";
+  if (detail.includes("user already registered")) return "Ya existe una cuenta con ese email.";
+  if (detail.includes("signup is disabled")) return "El registro esta desactivado en Supabase Auth.";
+  if (detail.includes("password should be at least")) {
+    return `La clave debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+  }
+  if (detail.includes("rate limit")) return "Has llegado al limite temporal de intentos o emails.";
+  return message || "Se produjo un error de autenticacion.";
+}
+
+function resetAuthValidation() {
+  emailInput.setCustomValidity("");
+  passwordInput.setCustomValidity("");
+  if (confirmPasswordInput) confirmPasswordInput.setCustomValidity("");
+}
+
+function reportAuthFieldError(input, message) {
+  input.setCustomValidity(message);
+  input.reportValidity();
+  input.focus();
+  return null;
+}
+
+function validateAuthForm(mode) {
+  resetAuthValidation();
+
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  const passwordConfirmation = confirmPasswordInput ? confirmPasswordInput.value : "";
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!email) return reportAuthFieldError(emailInput, "Introduce un email.");
+  if (!emailPattern.test(email)) return reportAuthFieldError(emailInput, "Introduce un email valido.");
+  if (!password) return reportAuthFieldError(passwordInput, "Introduce una clave.");
+
+  if (mode === "register" && password.length < PASSWORD_MIN_LENGTH) {
+    return reportAuthFieldError(
+      passwordInput,
+      `La clave debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`
+    );
+  }
+
+  if (mode === "register" && !passwordConfirmation) {
+    return reportAuthFieldError(confirmPasswordInput, "Confirma la clave.");
+  }
+
+  if (mode === "register" && password !== passwordConfirmation) {
+    return reportAuthFieldError(confirmPasswordInput, "Las claves no coinciden.");
+  }
+
+  return {
+    email,
+    password,
+    passwordConfirmation,
+  };
+}
+
+function resetAuthForm({ keepEmail = false } = {}) {
+  resetAuthValidation();
+  if (!keepEmail) emailInput.value = "";
+  passwordInput.value = "";
+  if (confirmPasswordInput) confirmPasswordInput.value = "";
+}
+
+function setAuthMode(mode) {
+  authMode = mode === "register" ? "register" : "login";
+  const isRegister = authMode === "register";
+
+  if (authTitle) authTitle.textContent = isRegister ? "Crear cuenta" : "Acceso";
+  if (authSubtitle) {
+    authSubtitle.textContent = isRegister
+      ? "Crea una cuenta para empezar a guardar datos por usuario."
+      : "Inicia sesion para ver y guardar tus datos.";
+  }
+  if (authModeHint) {
+    authModeHint.textContent = isRegister
+      ? "Si tu proyecto exige confirmacion por email, te guiaremos en ese flujo al terminar el alta."
+      : "Usa tu cuenta existente para seguir trabajando con tus datos.";
+  }
+  if (confirmPasswordField) confirmPasswordField.classList.toggle("hidden", !isRegister);
+  if (authModeLoginBtn) {
+    authModeLoginBtn.classList.toggle("is-active", !isRegister);
+    authModeLoginBtn.setAttribute("aria-pressed", String(!isRegister));
+  }
+  if (authModeRegisterBtn) {
+    authModeRegisterBtn.classList.toggle("is-active", isRegister);
+    authModeRegisterBtn.setAttribute("aria-pressed", String(isRegister));
+  }
+
+  passwordInput.setAttribute("autocomplete", isRegister ? "new-password" : "current-password");
+  if (loginBtn) loginBtn.textContent = isRegister ? "Crear cuenta" : "Entrar";
+  resetAuthValidation();
+}
+
+function buildAuthRedirectMessage(flowType) {
+  if (flowType === "signup" || flowType === "email") return "Email confirmado y sesion iniciada.";
+  return "Sesion iniciada.";
+}
+
+function clearAuthRedirectHash() {
+  const cleanUrl = `${window.location.pathname}${window.location.search}`;
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
+async function fetchUserForAccessToken(accessToken) {
+  return apiFetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+async function handleAuthRedirectResult() {
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  if (!hash) return false;
+
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  const errorDescription = params.get("error_description") || params.get("error");
+  const flowType = params.get("type") || "";
+
+  if (!accessToken && !refreshToken && !errorDescription) return false;
+
+  clearAuthRedirectHash();
+
+  if (errorDescription) {
+    setStatus("No se pudo completar la autenticacion por email.");
+    setMessage(translateAuthError(errorDescription));
+    return true;
+  }
+
+  try {
+    const user = await fetchUserForAccessToken(accessToken);
+    const session = buildSessionRecord(
+      {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: params.get("expires_at"),
+        expires_in: params.get("expires_in"),
+        user,
+      },
+      user
+    );
+
+    if (!session) throw new Error("No se pudo recuperar la sesion desde el enlace de autenticacion.");
+
+    setSession(session);
+    setAuthMode("login");
+    setAuthenticatedUI(true);
+    setActiveTab(loadPreferredTab());
+    await refreshAllData();
+    setMessage(buildAuthRedirectMessage(flowType));
+  } catch (error) {
+    clearSession();
+    setAuthenticatedUI(false);
+    setStatus("No se pudo recuperar la sesion del enlace.");
+    setMessage(translateAuthError(error.message));
+  }
+
+  return true;
 }
 
 function loadPreferredTab() {
@@ -399,14 +638,9 @@ async function refreshSessionIfNeeded() {
       body: JSON.stringify({ refresh_token: currentSession.refresh_token }),
     });
 
-    currentSession = {
-      access_token: refreshed.access_token,
-      refresh_token: refreshed.refresh_token,
-      expires_at: refreshed.expires_at,
-      user: refreshed.user,
-    };
-
-    saveSession(currentSession);
+    const session = extractSessionFromAuthResponse(refreshed);
+    if (!session) throw new Error("No se pudo refrescar la sesion.");
+    setSession(session);
     return currentSession;
   } catch {
     clearSession();
@@ -842,9 +1076,8 @@ async function fetchWeeklyReports() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "id,generated_at,week_start,week_end,payload_json,summary_text,created_at",
-    user_id: `eq.${currentSession.user.id}`,
     order: "week_start.desc",
   });
 
@@ -866,7 +1099,8 @@ async function refreshReports() {
   renderReportsList();
 }
 
-function setAuthenticatedUI(isAuthenticated) {
+function setAuthenticatedUI(isAuthenticated, options = {}) {
+  const shouldResetAuthForm = options.resetAuthForm !== false;
   loginCard.classList.toggle("hidden", isAuthenticated);
   zonaPrivada.classList.toggle("hidden", !isAuthenticated);
   if (mainTabs) mainTabs.classList.toggle("hidden", !isAuthenticated);
@@ -885,6 +1119,7 @@ function setAuthenticatedUI(isAuthenticated) {
   renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
   resetMedicationUI();
   resetReportsUI();
+  if (shouldResetAuthForm) resetAuthForm();
   setActiveTab("todayPanel");
 }
 
@@ -892,9 +1127,8 @@ async function fetchWeightRecords() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "id,ts,weight",
-    user_id: `eq.${currentSession.user.id}`,
     order: "ts.desc",
   });
 
@@ -911,9 +1145,8 @@ async function fetchHabits() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "id,name,description,is_active,created_at",
-    user_id: `eq.${currentSession.user.id}`,
     is_active: "eq.true",
     order: "created_at.asc",
   });
@@ -931,9 +1164,8 @@ async function fetchHabitChecksUntil(logDate) {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "habit_id,status,log_date",
-    user_id: `eq.${currentSession.user.id}`,
     log_date: `lte.${logDate}`,
     order: "log_date.asc",
   });
@@ -951,9 +1183,8 @@ async function fetchHabitChecksAll() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "habit_id,status,log_date",
-    user_id: `eq.${currentSession.user.id}`,
     order: "log_date.asc",
   });
 
@@ -976,9 +1207,8 @@ async function fetchMedicationsCatalog() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "id,name,form,strength,notes,active_from,active_to",
-    user_id: `eq.${currentSession.user.id}`,
     order: "name.asc",
   });
 
@@ -995,9 +1225,8 @@ async function fetchMedicationPlans() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "id,medication_id,type,frequency,time_window,target_time,tolerance_minutes,active_from,active_to",
-    user_id: `eq.${currentSession.user.id}`,
     order: "id.asc",
   });
 
@@ -1014,9 +1243,8 @@ async function fetchMedicationIntakes() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "id,medication_id,plan_id,timestamp,amount,source,reason,notes,created_at",
-    user_id: `eq.${currentSession.user.id}`,
     order: "timestamp.desc",
   });
 
@@ -1030,9 +1258,9 @@ async function fetchMedicationIntakes() {
 }
 
 async function ensureMedicationSeed() {
-  if (medicationSeedChecked) return;
   await refreshSessionIfNeeded();
   if (!currentSession) return;
+  if (medicationSeedUserId === getCurrentUserId()) return;
 
   const today = todayLocalDateString();
   let medications = await fetchMedicationsCatalog();
@@ -1046,11 +1274,12 @@ async function ensureMedicationSeed() {
   const missingMedications = requiredMedications.filter((med) => !existingByName.has(med.name.toLowerCase()));
 
   if (missingMedications.length > 0) {
-    const rows = missingMedications.map((med) => ({
-      user_id: currentSession.user.id,
-      name: med.name,
-      active_from: med.active_from,
-    }));
+    const rows = missingMedications.map((med) =>
+      withCurrentUserId({
+        name: med.name,
+        active_from: med.active_from,
+      })
+    );
     await apiFetch(`${SUPABASE_URL}/rest/v1/medications`, {
       method: "POST",
       headers: authHeaders({ Prefer: "return=representation" }),
@@ -1074,7 +1303,7 @@ async function ensureMedicationSeed() {
   const atorvastatina = byName.get("atorvastatina");
   const rows = [];
   const buildPlanRow = ({ medicationId, type, frequency = null, timeWindow = null }) => ({
-    user_id: currentSession.user.id,
+    user_id: getCurrentUserId(),
     medication_id: medicationId,
     type,
     frequency,
@@ -1105,7 +1334,7 @@ async function ensureMedicationSeed() {
     });
   }
 
-  medicationSeedChecked = true;
+  medicationSeedUserId = getCurrentUserId();
 }
 
 function refreshMedicationHistory() {
@@ -1217,9 +1446,8 @@ async function findMedicationByName(name) {
   const cached = medicationCache.medicationsAll.find((med) => med.name.toLowerCase() === normalized);
   if (cached) return cached;
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     select: "id,name,active_from,active_to",
-    user_id: `eq.${currentSession.user.id}`,
     name: `ilike.${name}`,
     limit: "5",
   });
@@ -1256,13 +1484,12 @@ async function handleCreateMedicationPlan() {
         method: "POST",
         headers: authHeaders({ Prefer: "return=representation" }),
         body: JSON.stringify([
-          {
-            user_id: currentSession.user.id,
+          withCurrentUserId({
             name,
             notes: notes || null,
             active_from: start,
             active_to: null,
-          },
+          }),
         ]),
       });
       medication = inserted[0];
@@ -1284,8 +1511,7 @@ async function handleCreateMedicationPlan() {
       method: "POST",
       headers: authHeaders({ Prefer: "return=minimal" }),
       body: JSON.stringify([
-        {
-          user_id: currentSession.user.id,
+        withCurrentUserId({
           medication_id: medication.id,
           type,
           frequency: type === "scheduled" ? "daily" : null,
@@ -1294,7 +1520,7 @@ async function handleCreateMedicationPlan() {
           tolerance_minutes: null,
           active_from: start,
           active_to: null,
-        },
+        }),
       ]),
     });
 
@@ -1378,7 +1604,14 @@ async function refreshAllData() {
   ]);
 
   if (weightsResult.status === "rejected") {
-    setStatus(`Error en peso: ${weightsResult.reason.message}`);
+    const detail = weightsResult.reason.message || "error desconocido";
+    const missingTable = detail.includes('relation "weights" does not exist');
+    if (missingTable) {
+      setStatus("Falta crear tablas de peso en Supabase. Ejecuta supabase_weights.sql.");
+      renderWeightTable([]);
+    } else {
+      setStatus(`Error en peso: ${detail}`);
+    }
   }
 
   if (habitsResult.status === "rejected") {
@@ -1469,13 +1702,9 @@ function parseCSV(text) {
 }
 
 async function handleLogin() {
-  const email = emailInput.value.trim();
-  const password = passwordInput.value.trim();
-
-  if (!email || !password) {
-    setMessage("Ingresa email y clave.");
-    return;
-  }
+  const credentials = validateAuthForm("login");
+  if (!credentials) return;
+  const { email, password } = credentials;
 
   loginBtn.disabled = true;
   setStatus("Iniciando sesion...");
@@ -1490,21 +1719,72 @@ async function handleLogin() {
       body: JSON.stringify({ email, password }),
     });
 
-    currentSession = {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: data.expires_at,
-      user: data.user,
-    };
+    const session = extractSessionFromAuthResponse(data);
+    if (!session) throw new Error("La respuesta de login no incluye una sesion valida.");
 
-    saveSession(currentSession);
+    setSession(session);
+    setAuthMode("login");
     setAuthenticatedUI(true);
     setActiveTab(loadPreferredTab());
     await refreshAllData();
     setMessage("Sesion iniciada.");
   } catch (error) {
     setStatus("No se pudo iniciar sesion.");
-    setMessage(`Login fallido: ${error.message}`);
+    setMessage(translateAuthError(error.message));
+  } finally {
+    loginBtn.disabled = false;
+  }
+}
+
+function isSignupConfirmationPending(response) {
+  const user = response && typeof response === "object" ? response.user || response : null;
+  if (!user || typeof user !== "object") return false;
+  if (Array.isArray(user.identities) && user.identities.length === 0) return true;
+  return !(user.confirmed_at || user.email_confirmed_at);
+}
+
+async function handleRegister() {
+  const credentials = validateAuthForm("register");
+  if (!credentials) return;
+  const { email, password } = credentials;
+
+  loginBtn.disabled = true;
+  setStatus("Creando cuenta...");
+
+  try {
+    const response = await apiFetch(`${SUPABASE_URL}/auth/v1/signup`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const session = extractSessionFromAuthResponse(response);
+    if (session) {
+      setSession(session);
+      setAuthMode("login");
+      setAuthenticatedUI(true);
+      setActiveTab(loadPreferredTab());
+      await refreshAllData();
+      setMessage("Cuenta creada y sesion iniciada.");
+      return;
+    }
+
+    if (isSignupConfirmationPending(response)) {
+      setAuthMode("login");
+      resetAuthForm({ keepEmail: true });
+      setAuthenticatedUI(false, { resetAuthForm: false });
+      setStatus("Revisa tu email para confirmar la cuenta.");
+      setMessage("Cuenta creada. Cuando confirmes el email, volveras aqui con la sesion iniciada.");
+      return;
+    }
+
+    await handleLogin();
+  } catch (error) {
+    setStatus("No se pudo completar el registro.");
+    setMessage(translateAuthError(error.message));
   } finally {
     loginBtn.disabled = false;
   }
@@ -1526,6 +1806,7 @@ async function handleLogout() {
   }
 
   clearSession();
+  setAuthMode("login");
   setAuthenticatedUI(false);
   setMessage("Sesion cerrada.");
 }
@@ -1545,11 +1826,10 @@ async function handleAddWeight() {
       method: "POST",
       headers: authHeaders({ Prefer: "return=minimal" }),
       body: JSON.stringify([
-        {
-          user_id: currentSession.user.id,
+        withCurrentUserId({
           ts: nowISO(),
           weight: Number(value.toFixed(1)),
-        },
+        }),
       ]),
     });
 
@@ -1565,9 +1845,8 @@ async function handleDeleteWeight(id) {
   const ok = await ensureAuthenticated();
   if (!ok) return;
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     id: `eq.${id}`,
-    user_id: `eq.${currentSession.user.id}`,
   });
 
   try {
@@ -1627,7 +1906,7 @@ async function handleExportAllData() {
 
     const payload = {
       exported_at: nowISO(),
-      user_id: currentSession.user.id,
+      user_id: getCurrentUserId(),
       weights,
       habits,
       habit_checks: habitChecks,
@@ -1692,7 +1971,7 @@ async function handleImportWeights(file) {
     }
 
     const rows = parsed.map((row) => ({
-      user_id: currentSession.user.id,
+      user_id: getCurrentUserId(),
       ts: row.ts,
       weight: row.weight,
     }));
@@ -1717,9 +1996,7 @@ async function handleClearWeights() {
   if (!ok) return;
   if (!confirm("Seguro que quieres borrar todos los registros de peso?")) return;
 
-  const params = new URLSearchParams({
-    user_id: `eq.${currentSession.user.id}`,
-  });
+  const params = createUserScopedParams();
 
   try {
     await apiFetch(`${SUPABASE_URL}/rest/v1/weights?${params.toString()}`, {
@@ -1756,12 +2033,11 @@ async function handleCreateHabit() {
       method: "POST",
       headers: authHeaders({ Prefer: "return=minimal" }),
       body: JSON.stringify([
-        {
-          user_id: currentSession.user.id,
+        withCurrentUserId({
           name,
           description: description || null,
           is_active: true,
-        },
+        }),
       ]),
     });
 
@@ -1789,12 +2065,11 @@ async function upsertHabitStatus(habitId, status) {
       method: "POST",
       headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
       body: JSON.stringify([
-        {
-          user_id: currentSession.user.id,
+        withCurrentUserId({
           habit_id: Number(habitId),
           log_date: logDate,
           status: Number(status),
-        },
+        }),
       ]),
     });
 
@@ -1825,14 +2100,13 @@ async function handleTakeScheduledMedication(planId) {
     method: "POST",
     headers: authHeaders({ Prefer: "return=minimal" }),
     body: JSON.stringify([
-      {
-        user_id: currentSession.user.id,
+      withCurrentUserId({
         medication_id: plan.medication_id,
         plan_id: plan.id,
         timestamp: nowISO(),
         amount: 1,
         source: "scheduled",
-      },
+      }),
     ]),
   });
 
@@ -1844,9 +2118,8 @@ async function handleUndoScheduledMedication(intakeId) {
   const ok = await ensureAuthenticated("Inicia sesion para modificar medicaciones.");
   if (!ok) return;
 
-  const params = new URLSearchParams({
+  const params = createUserScopedParams({
     id: `eq.${intakeId}`,
-    user_id: `eq.${currentSession.user.id}`,
   });
 
   await apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes?${params.toString()}`, {
@@ -1887,8 +2160,7 @@ async function handleTakeExtraMedication(planId) {
     method: "POST",
     headers: authHeaders({ Prefer: "return=minimal" }),
     body: JSON.stringify([
-      {
-        user_id: currentSession.user.id,
+      withCurrentUserId({
         medication_id: plan.medication_id,
         plan_id: plan.id,
         timestamp: nowISO(),
@@ -1896,7 +2168,7 @@ async function handleTakeExtraMedication(planId) {
         source: "extra",
         reason: reasonValue || null,
         notes: notesValue || null,
-      },
+      }),
     ]),
   });
 
@@ -1905,16 +2177,42 @@ async function handleTakeExtraMedication(planId) {
 }
 
 function bindEvents() {
-  loginBtn.addEventListener("click", async (event) => {
-    event.preventDefault();
-    await handleLogin();
+  if (authForm) {
+    authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (authMode === "register") {
+        await handleRegister();
+        return;
+      }
+      await handleLogin();
+    });
+  }
+
+  if (authModeLoginBtn) {
+    authModeLoginBtn.addEventListener("click", () => {
+      setAuthMode("login");
+    });
+  }
+
+  if (authModeRegisterBtn) {
+    authModeRegisterBtn.addEventListener("click", () => {
+      setAuthMode("register");
+    });
+  }
+
+  emailInput.addEventListener("input", () => {
+    resetAuthValidation();
   });
 
-  passwordInput.addEventListener("keydown", async (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    await handleLogin();
+  passwordInput.addEventListener("input", () => {
+    resetAuthValidation();
   });
+
+  if (confirmPasswordInput) {
+    confirmPasswordInput.addEventListener("input", () => {
+      resetAuthValidation();
+    });
+  }
 
   if (mainTabs) {
     mainTabs.addEventListener("click", (event) => {
@@ -2128,12 +2426,16 @@ async function init() {
   medHistoryFrom.value = addDaysToDateString(today, -14);
   medHistoryTo.value = today;
   medCreateStart.value = today;
+  setAuthMode("login");
   updateMedicationCreateVisibility();
   updateNow();
   setInterval(updateNow, 1000);
   resetTabStatus();
   bindEvents();
   setActiveTab(loadPreferredTab());
+
+  const handledRedirect = await handleAuthRedirectResult();
+  if (handledRedirect) return;
 
   if (!currentSession) {
     setAuthenticatedUI(false);

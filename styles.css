@@ -199,10 +199,35 @@ button:disabled {
   max-width: 560px;
 }
 
+.auth-mode-switch {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 14px;
+  background: #f4f2fb;
+  border: 1px solid var(--stroke);
+  margin-bottom: 14px;
+}
+
+.mode-toggle {
+  box-shadow: none;
+  min-width: 120px;
+}
+
+.mode-toggle.is-active {
+  background: #fff;
+  color: var(--ink);
+  border-color: var(--stroke);
+}
+
 .auth-form {
   display: grid;
   gap: 12px;
   min-width: 280px;
+}
+
+.auth-hint {
+  max-width: 360px;
 }
 
 .header-menu {
@@ -832,6 +857,15 @@ details[open] summary::before {
   .habit-checks .habit-btn,
   .habit-name-toggle {
     width: auto;
+  }
+
+  .auth-mode-switch {
+    width: 100%;
+  }
+
+  .mode-toggle {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .menu-toggle {

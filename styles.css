@@ -54,30 +54,30 @@ body {
 }
 
 .hero-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 14px;
-  flex-wrap: wrap;
 }
 
 .hero-brand {
   display: grid;
-  gap: 10px;
-  flex: 1 1 320px;
+  gap: 6px;
   min-width: 0;
 }
 
 .hero-logo {
   display: block;
-  width: clamp(260px, 56vw, 620px);
+  width: min(100%, 440px);
   max-width: 100%;
   height: auto;
 }
 
 .hero-date {
-  margin: 0 0 0 4px;
+  margin: 0;
+  padding-left: 2px;
   color: var(--muted);
+  line-height: 1.15;
   font-size: 0.95rem;
   text-transform: capitalize;
 }
@@ -247,7 +247,7 @@ button:disabled {
 
 .header-menu {
   position: relative;
-  margin-left: auto;
+  align-self: start;
 }
 
 .tab-nav {
@@ -832,20 +832,19 @@ details[open] summary::before {
 
   .hero-top,
   .today-summary {
-    align-items: stretch;
+    align-items: start;
   }
 
   .hero-top {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .hero-logo {
-    width: min(100%, 420px);
+    width: min(100%, 250px);
   }
 
   .header-menu {
-    margin-left: 0;
-    align-self: flex-end;
+    align-self: start;
   }
 
   .tab-nav {

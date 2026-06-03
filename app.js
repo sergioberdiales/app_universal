@@ -2059,24 +2059,63 @@ async function upsertHabitStatus(habitId, status) {
   if (!ok) return;
 
   const logDate = getSelectedHabitDate();
+  const row = withCurrentUserId({
+    habit_id: Number(habitId),
+    log_date: logDate,
+    status: Number(status),
+  });
 
   try {
     await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?on_conflict=user_id,habit_id,log_date`, {
       method: "POST",
       headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify([
-        withCurrentUserId({
-          habit_id: Number(habitId),
-          log_date: logDate,
-          status: Number(status),
-        }),
-      ]),
+      body: JSON.stringify([row]),
     });
 
     await refreshHabits();
   } catch (error) {
-    setMessage(`No se pudo guardar el seguimiento: ${error.message}`);
+    try {
+      await saveHabitStatusWithoutUpsert(row);
+      await refreshHabits();
+    } catch (fallbackError) {
+      setMessage(`No se pudo guardar el seguimiento: ${fallbackError.message || error.message}`);
+    }
   }
+}
+
+async function saveHabitStatusWithoutUpsert(row) {
+  const params = createUserScopedParams({
+    select: "id",
+    habit_id: `eq.${row.habit_id}`,
+    log_date: `eq.${row.log_date}`,
+    order: "created_at.desc",
+    limit: "1",
+  });
+
+  const existing = await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+
+  const existingId = existing && existing[0] ? existing[0].id : null;
+
+  if (existingId) {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?id=eq.${existingId}`, {
+      method: "PATCH",
+      headers: authHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify({ status: row.status }),
+    });
+    return;
+  }
+
+  await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks`, {
+    method: "POST",
+    headers: authHeaders({ Prefer: "return=minimal" }),
+    body: JSON.stringify([row]),
+  });
 }
 
 async function handleTakeScheduledMedication(planId) {

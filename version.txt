@@ -1,1 +1,1 @@
-build=2026-06-03-rls-diagnostics
+build=2026-06-03-habit-error-details

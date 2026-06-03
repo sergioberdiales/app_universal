@@ -419,6 +419,19 @@ function translateDataError(message) {
   return message || "Se produjo un error de datos.";
 }
 
+function formatApiError(error) {
+  if (!error) return "error desconocido";
+
+  const parts = [];
+  if (error.status) parts.push(`HTTP ${error.status}`);
+  if (error.code) parts.push(`code ${error.code}`);
+  if (error.message) parts.push(error.message);
+  if (error.details) parts.push(`details: ${error.details}`);
+  if (error.hint) parts.push(`hint: ${error.hint}`);
+
+  return parts.length > 0 ? parts.join(" | ") : String(error);
+}
+
 function resetAuthValidation() {
   emailInput.setCustomValidity("");
   passwordInput.setCustomValidity("");
@@ -622,7 +635,12 @@ async function apiFetch(url, options = {}) {
 
   if (!response.ok) {
     const detail = body.error_description || body.message || body.error || `HTTP ${response.status}`;
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = response.status;
+    error.code = body.code || body.error || "";
+    error.details = body.details || "";
+    error.hint = body.hint || "";
+    throw error;
   }
 
   return body;
@@ -2086,7 +2104,12 @@ async function upsertHabitStatus(habitId, status) {
       await saveHabitStatusWithoutUpsert(row);
       await refreshHabits();
     } catch (fallbackError) {
-      setMessage(`No se pudo guardar el seguimiento: ${translateDataError(fallbackError.message || error.message)}`);
+      const readableError = translateDataError(fallbackError.message || error.message);
+      setMessage(
+        `No se pudo guardar el seguimiento: ${readableError}. Diagnostico: upsert=${formatApiError(
+          error
+        )}; fallback=${formatApiError(fallbackError)}`
+      );
     }
   }
 }

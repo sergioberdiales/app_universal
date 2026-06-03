@@ -411,6 +411,14 @@ function translateAuthError(message) {
   return message || "Se produjo un error de autenticacion.";
 }
 
+function translateDataError(message) {
+  const detail = String(message || "").toLowerCase();
+  if (detail.includes("row-level security") || detail.includes("permission denied")) {
+    return "Permisos de Supabase bloqueados. Ejecuta supabase_rls_repair.sql en el SQL Editor.";
+  }
+  return message || "Se produjo un error de datos.";
+}
+
 function resetAuthValidation() {
   emailInput.setCustomValidity("");
   passwordInput.setCustomValidity("");
@@ -2078,7 +2086,7 @@ async function upsertHabitStatus(habitId, status) {
       await saveHabitStatusWithoutUpsert(row);
       await refreshHabits();
     } catch (fallbackError) {
-      setMessage(`No se pudo guardar el seguimiento: ${fallbackError.message || error.message}`);
+      setMessage(`No se pudo guardar el seguimiento: ${translateDataError(fallbackError.message || error.message)}`);
     }
   }
 }

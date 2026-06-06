@@ -789,8 +789,38 @@ function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesC
     .join("");
 
   habitsTable.innerHTML = rows;
+  bindRenderedHabitActions();
   habitCounter.textContent = `${habits.length} habito${habits.length === 1 ? "" : "s"}`;
   habitSummary.textContent = `${date}: ${yesCount} si, ${noCount} no, ${pendingCount} pendientes.`;
+}
+
+function bindRenderedHabitActions() {
+  const descriptionButtons = habitsTable.querySelectorAll("button[data-toggle-description]");
+  for (const button of descriptionButtons) {
+    button.addEventListener("click", () => {
+      const habitId = button.dataset.toggleDescription;
+      const description = habitsTable.querySelector(`[data-description-for="${habitId}"]`);
+      if (!description) return;
+
+      const nextHidden = !description.classList.contains("hidden");
+      description.classList.toggle("hidden", nextHidden);
+      button.setAttribute("aria-expanded", String(!nextHidden));
+    });
+  }
+
+  const statusButtons = habitsTable.querySelectorAll("button[data-habit-id][data-status]");
+  for (const button of statusButtons) {
+    button.addEventListener("click", async () => {
+      const rowButtons = button.closest(".habit-checks")?.querySelectorAll(".habit-btn") || [];
+      for (const rowButton of rowButtons) rowButton.disabled = true;
+
+      try {
+        await upsertHabitStatus(button.dataset.habitId, button.dataset.status);
+      } finally {
+        for (const rowButton of rowButtons) rowButton.disabled = false;
+      }
+    });
+  }
 }
 
 function resetMedicationUI() {
@@ -2099,10 +2129,12 @@ async function upsertHabitStatus(habitId, status) {
     });
 
     await refreshHabits();
+    setMessage("Seguimiento guardado.");
   } catch (error) {
     try {
       await saveHabitStatusWithoutUpsert(row);
       await refreshHabits();
+      setMessage("Seguimiento guardado.");
     } catch (fallbackError) {
       const readableError = translateDataError(fallbackError.message || error.message);
       setMessage(
@@ -2387,25 +2419,6 @@ function bindEvents() {
       await refreshHabits();
     } catch (error) {
       setStatus(`Error en habitos: ${error.message}`);
-    }
-  });
-
-  habitsTable.addEventListener("click", async (event) => {
-    const descriptionToggle = event.target.closest("button[data-toggle-description]");
-    if (descriptionToggle) {
-      const habitId = descriptionToggle.dataset.toggleDescription;
-      const description = habitsTable.querySelector(`[data-description-for="${habitId}"]`);
-      if (description) {
-        const nextHidden = !description.classList.contains("hidden");
-        description.classList.toggle("hidden", nextHidden);
-        descriptionToggle.setAttribute("aria-expanded", String(!nextHidden));
-      }
-      return;
-    }
-
-    const statusBtn = event.target.closest("button[data-habit-id][data-status]");
-    if (statusBtn) {
-      await upsertHabitStatus(statusBtn.dataset.habitId, statusBtn.dataset.status);
     }
   });
 

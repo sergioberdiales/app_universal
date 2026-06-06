@@ -1,4 +1,4 @@
-// Build 2026-06-06: new filename bypasses stale PWA script caches.
+// Build 2026-06-06b: paginate habit history and bypass stale PWA script caches.
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
@@ -647,6 +647,25 @@ async function apiFetch(url, options = {}) {
   return body;
 }
 
+async function apiFetchAllRows(url, options = {}, pageSize = 1000) {
+  const rows = [];
+  let offset = 0;
+
+  while (true) {
+    const pageUrl = new URL(url);
+    pageUrl.searchParams.set("limit", String(pageSize));
+    pageUrl.searchParams.set("offset", String(offset));
+
+    const page = await apiFetch(pageUrl.toString(), options);
+    if (!Array.isArray(page)) throw new Error("La respuesta paginada no contiene una lista.");
+
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+
+    offset += page.length;
+  }
+}
+
 async function refreshSessionIfNeeded() {
   if (!currentSession) return null;
   if (!isSessionExpired(currentSession)) return currentSession;
@@ -1224,10 +1243,10 @@ async function fetchHabitChecksUntil(logDate) {
   const params = createUserScopedParams({
     select: "habit_id,status,log_date",
     log_date: `lte.${logDate}`,
-    order: "log_date.asc",
+    order: "log_date.asc,habit_id.asc,id.asc",
   });
 
-  return apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
+  return apiFetchAllRows(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
     method: "GET",
     headers: {
       apikey: SUPABASE_ANON_KEY,
@@ -1242,10 +1261,10 @@ async function fetchHabitChecksAll() {
 
   const params = createUserScopedParams({
     select: "habit_id,status,log_date",
-    order: "log_date.asc",
+    order: "log_date.asc,habit_id.asc,id.asc",
   });
 
-  return apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
+  return apiFetchAllRows(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, {
     method: "GET",
     headers: {
       apikey: SUPABASE_ANON_KEY,

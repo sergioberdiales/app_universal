@@ -1,9 +1,9 @@
-const CACHE_NAME = "registro-personal-shell-v6";
+const CACHE_NAME = "registro-personal-shell-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app-20260606.js",
+  "./app-20260606b.js",
   "./pwa.js?v=pwa-20260424a",
   "./manifest.webmanifest?v=pwa-20260424a",
   "./logo_header_v1.png",
@@ -55,18 +55,30 @@ self.addEventListener("fetch", (event) => {
 
   if (!["script", "style", "image", "manifest"].includes(request.destination)) return;
 
-  event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((cached) => {
-      const fetched = fetch(request)
+  if (["script", "style", "manifest"].includes(request.destination)) {
+    event.respondWith(
+      fetch(request)
         .then((response) => {
           if (response && response.ok) {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
           }
           return response;
         })
-        .catch(() => cached);
+        .catch(() => caches.match(request, { ignoreSearch: true }))
+    );
+    return;
+  }
 
-      return cached || fetched;
-    })
+  event.respondWith(
+    caches.match(request, { ignoreSearch: true }).then(
+      (cached) =>
+        cached ||
+        fetch(request).then((response) => {
+          if (response && response.ok) {
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          }
+          return response;
+        })
+    )
   );
 });

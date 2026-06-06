@@ -3,7 +3,7 @@ const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js",
+  "./app-20260606.js",
   "./pwa.js?v=pwa-20260424a",
   "./manifest.webmanifest?v=pwa-20260424a",
   "./logo_header_v1.png",

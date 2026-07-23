@@ -59,6 +59,7 @@ const habitsTable = document.getElementById("habitsTable");
 const habitCounter = document.getElementById("habitCounter");
 const habitSummary = document.getElementById("habitSummary");
 const newHabitDetails = document.getElementById("newHabitDetails");
+const exportHabitsBtn = document.getElementById("exportHabits");
 
 const medTodayBadge = document.getElementById("medTodayBadge");
 const medScheduledList = document.getElementById("medScheduledList");
@@ -1236,6 +1237,24 @@ async function fetchHabits() {
   });
 }
 
+async function fetchAllHabits() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+
+  const params = createUserScopedParams({
+    select: "id,name,description,is_active,created_at",
+    order: "created_at.asc",
+  });
+
+  return apiFetch(`${SUPABASE_URL}/rest/v1/habits?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${currentSession.access_token}`,
+    },
+  });
+}
+
 async function fetchHabitChecksUntil(logDate) {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
@@ -1777,6 +1796,11 @@ function parseCSV(text) {
   return records;
 }
 
+function escapeCSVCell(value) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 async function handleLogin() {
   const credentials = validateAuthForm("login");
   if (!credentials) return;
@@ -1963,6 +1987,43 @@ async function handleExportWeights() {
     setMessage("CSV exportado.");
   } catch (error) {
     setMessage(`No se pudo exportar: ${error.message}`);
+  }
+}
+
+async function handleExportHabits() {
+  const ok = await ensureAuthenticated("Inicia sesion para exportar.");
+  if (!ok) return;
+
+  try {
+    const [habits, checks] = await Promise.all([fetchAllHabits(), fetchHabitChecksAll()]);
+    if (checks.length === 0) {
+      setMessage("No hay registros de habitos para exportar.");
+      return;
+    }
+
+    const habitsById = new Map(habits.map((habit) => [Number(habit.id), habit]));
+    const rows = checks.map((check) => {
+      const habit = habitsById.get(Number(check.habit_id));
+      return [
+        check.log_date,
+        habit ? habit.name : `Habito ${check.habit_id}`,
+        Number(check.status) === 1 ? "yes" : "no",
+        habit ? habit.description : "",
+      ]
+        .map(escapeCSVCell)
+        .join(",");
+    });
+    const csv = ["date,habit,status,description", ...rows].join("\n");
+    const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `habitos-${todayLocalDateString()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage("CSV de habitos exportado.");
+  } catch (error) {
+    setMessage(`No se pudieron exportar los habitos: ${error.message}`);
   }
 }
 
@@ -2403,6 +2464,10 @@ function bindEvents() {
 
   exportarBtn.addEventListener("click", async () => {
     await handleExportWeights();
+  });
+
+  exportHabitsBtn.addEventListener("click", async () => {
+    await handleExportHabits();
   });
 
   importarInput.addEventListener("change", async (event) => {

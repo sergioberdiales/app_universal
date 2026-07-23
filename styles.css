@@ -476,6 +476,11 @@ td {
   background: #bfb9cf;
 }
 
+.streak-dot.not-applicable {
+  background: #8d88a0;
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
 .habit-description {
   margin-top: 8px;
   color: var(--muted);
@@ -487,6 +492,38 @@ td {
   display: inline-flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.habit-detail-btn {
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 0.82rem;
+}
+
+.detail-indicator {
+  color: var(--accent-2);
+  font-size: 0.68rem;
+  margin-left: 4px;
+}
+
+.daily-secondary-actions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.daily-secondary-actions .ghost {
+  padding: 7px 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .habit-btn {
@@ -618,6 +655,109 @@ details[open] summary::before {
   display: grid;
   gap: 10px;
 }
+
+.health-subnav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 6px;
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  background: #fff9;
+}
+
+.health-subnav-btn {
+  flex: 1;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.health-subnav-btn.is-active {
+  background: #fff;
+  color: var(--ink);
+  border-color: var(--stroke);
+}
+
+.health-subpanel,
+.health-event-list {
+  display: grid;
+  gap: 14px;
+}
+
+.health-event-item {
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 14px;
+  background: #fff;
+  display: grid;
+  gap: 10px;
+}
+
+.health-status {
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.health-status-active { background: #fff0e9; color: #9a492c; }
+.health-status-improving { background: #fff8df; color: #826917; }
+.health-status-resolved { background: #e5f6f2; color: #20675f; }
+
+.health-event-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.health-form-wide { grid-column: 1 / -1; }
+.health-form-actions { display: flex; justify-content: flex-end; }
+
+.habit-link-field {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.habit-link-field legend { font-weight: 600; padding: 0 6px; }
+.habit-choice-list { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.habit-choice-list label { font-weight: 500; }
+
+.modal-open { overflow: hidden; }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(25, 25, 25, 0.38);
+  backdrop-filter: blur(4px);
+}
+
+.modal-card {
+  width: min(100%, 560px);
+  max-height: min(88vh, 760px);
+  overflow-y: auto;
+  border-radius: 20px;
+  padding: 20px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.modal-card-wide { width: min(100%, 760px); }
+.detail-form { margin-top: 16px; display: grid; gap: 14px; }
+.modal-actions { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.secondary-status-action { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.day-detail-content { display: grid; gap: 10px; margin-top: 14px; }
+.day-detail-row, .day-note { border: 1px solid var(--stroke); border-radius: 14px; padding: 12px; }
+.day-detail-row > div { display: flex; justify-content: space-between; gap: 10px; }
+.day-detail-row p, .day-note p { margin: 8px 0 0; color: var(--muted); }
+.day-status { font-size: 0.82rem; color: var(--muted); }
+.day-status-1 { color: #20675f; }
+.day-status-0 { color: #a13e39; }
+.day-status-2 { color: #665f78; }
 
 .med-list {
   display: grid;
@@ -869,6 +1009,7 @@ details[open] summary::before {
   }
 
   .med-create-form,
+  .health-event-form,
   .report-blocks {
     grid-template-columns: 1fr;
   }
@@ -882,6 +1023,7 @@ details[open] summary::before {
   .tab-btn,
   .menu-toggle,
   .habit-checks .habit-btn,
+  .habit-detail-btn,
   .habit-name-toggle {
     width: auto;
   }
@@ -902,4 +1044,7 @@ details[open] summary::before {
   .habit-checks {
     width: 100%;
   }
+
+  .health-subnav { flex-direction: column; }
+  .modal-actions button { width: 100%; }
 }

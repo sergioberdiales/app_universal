@@ -9,6 +9,8 @@ Registro Personal es una aplicación web estática para llevar el seguimiento de
 - Hábitos diarios con respuestas Sí/No.
 - Peso.
 - Historial de medicamentos prescritos por periodos.
+- Eventos de salud puntuales o prolongados y su relacion opcional con habitos.
+- Comentarios, motivos y notas diarias opcionales.
 - Informes semanales de hábitos y peso.
 
 La aplicación se publica mediante GitHub Pages y utiliza Supabase para la
@@ -73,6 +75,19 @@ Las tablas anteriores `medications`, `medication_plans` y
 no las consulta. No existe migración automática porque las tomas históricas no
 permiten deducir fechas reales de prescripción.
 
+El contexto de salud utiliza:
+
+- `health_events`: eventos activos, en mejoria o resueltos.
+- `health_event_habits`: relacion opcional de un evento con varios habitos.
+- `habit_checks.comment`, `reason` y `health_event_id`: detalle opcional de un
+  registro diario.
+- `daily_notes`: una nota general opcional por usuario y fecha.
+
+Los estados historicos `0` y `1` de `habit_checks` mantienen su significado. El
+nuevo valor `2` representa "no aplicable" y queda fuera del numerador y del
+denominador de cumplimiento. Los dias sin fila siguen siendo "sin registro" y
+no se convierten en incumplimientos.
+
 ## Seguridad
 
 Las tablas deben tener RLS habilitado y políticas que permitan a cada usuario
@@ -84,6 +99,7 @@ Los scripts relacionados con la configuración de seguridad son:
 - `supabase_rls_repair.sql`
 - `supabase_multiuser.sql`
 - `supabase_prescribed_medications.sql`
+- `supabase_health_events.sql`
 
 El aviso de Supabase **Table publicly accessible** indica que alguna tabla del
 esquema `public` no tiene RLS habilitado. Debe corregirse, aunque no implica

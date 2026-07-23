@@ -1,4 +1,4 @@
-const CACHE_NAME = "registro-personal-shell-v8-prescriptions";
+const CACHE_NAME = "registro-personal-shell-v9-health-context";
 const APP_SHELL = [
   "./",
   "./index.html",

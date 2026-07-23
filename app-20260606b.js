@@ -1,10 +1,10 @@
-// Build 2026-07-23: medication prescriptions are stored as treatment periods.
+// Build 2026-07-23: optional health context for habits and treatment history.
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
 const SESSION_KEY = "peso_supabase_session_v1";
 const TAB_KEY = "registro_tab_v1";
-const TAB_IDS = ["todayPanel", "weightPanel", "medicationPanel", "reportsPanel"];
+const TAB_IDS = ["todayPanel", "healthPanel", "weightPanel", "reportsPanel"];
 
 const loginCard = document.getElementById("loginCard");
 const zonaPrivada = document.getElementById("zonaPrivada");
@@ -20,12 +20,13 @@ const headerMenuPanel = document.getElementById("headerMenuPanel");
 
 const todayPanel = document.getElementById("todayPanel");
 const weightPanel = document.getElementById("weightPanel");
+const healthPanel = document.getElementById("healthPanel");
 const medicationPanel = document.getElementById("medicationPanel");
 const reportsPanel = document.getElementById("reportsPanel");
 const panelMap = {
   todayPanel,
   weightPanel,
-  medicationPanel,
+  healthPanel,
   reportsPanel,
 };
 
@@ -59,6 +60,53 @@ const habitCounter = document.getElementById("habitCounter");
 const habitSummary = document.getElementById("habitSummary");
 const newHabitDetails = document.getElementById("newHabitDetails");
 const exportHabitsBtn = document.getElementById("exportHabits");
+const openDayDetail = document.getElementById("openDayDetail");
+const openDailyNote = document.getElementById("openDailyNote");
+const dailyNoteIndicator = document.getElementById("dailyNoteIndicator");
+
+const healthEventNew = document.getElementById("healthEventNew");
+const healthActiveBadge = document.getElementById("healthActiveBadge");
+const healthHistoryBadge = document.getElementById("healthHistoryBadge");
+const healthActiveList = document.getElementById("healthActiveList");
+const healthHistoryList = document.getElementById("healthHistoryList");
+const healthEventFormCard = document.getElementById("healthEventFormCard");
+const healthEventFormTitle = document.getElementById("healthEventFormTitle");
+const healthEventForm = document.getElementById("healthEventForm");
+const healthEventEditId = document.getElementById("healthEventEditId");
+const healthEventTitle = document.getElementById("healthEventTitle");
+const healthEventType = document.getElementById("healthEventType");
+const healthEventStart = document.getElementById("healthEventStart");
+const healthEventEnd = document.getElementById("healthEventEnd");
+const healthEventStatus = document.getElementById("healthEventStatus");
+const healthEventSeverity = document.getElementById("healthEventSeverity");
+const healthEventDescription = document.getElementById("healthEventDescription");
+const healthEventHabitChoices = document.getElementById("healthEventHabitChoices");
+const healthEventFormError = document.getElementById("healthEventFormError");
+const healthEventSubmit = document.getElementById("healthEventSubmit");
+const healthEventCancel = document.getElementById("healthEventCancel");
+
+const habitDetailModal = document.getElementById("habitDetailModal");
+const habitDetailTitle = document.getElementById("habitDetailTitle");
+const habitDetailClose = document.getElementById("habitDetailClose");
+const habitDetailForm = document.getElementById("habitDetailForm");
+const habitDetailHabitId = document.getElementById("habitDetailHabitId");
+const habitDetailReason = document.getElementById("habitDetailReason");
+const habitDetailHealthEvent = document.getElementById("habitDetailHealthEvent");
+const habitEventSuggestion = document.getElementById("habitEventSuggestion");
+const habitDetailComment = document.getElementById("habitDetailComment");
+const habitDetailNotApplicable = document.getElementById("habitDetailNotApplicable");
+const habitDetailError = document.getElementById("habitDetailError");
+const habitDetailClear = document.getElementById("habitDetailClear");
+const dailyNoteModal = document.getElementById("dailyNoteModal");
+const dailyNoteClose = document.getElementById("dailyNoteClose");
+const dailyNoteForm = document.getElementById("dailyNoteForm");
+const dailyNoteComment = document.getElementById("dailyNoteComment");
+const dailyNoteError = document.getElementById("dailyNoteError");
+const dailyNoteDelete = document.getElementById("dailyNoteDelete");
+const dayDetailModal = document.getElementById("dayDetailModal");
+const dayDetailTitle = document.getElementById("dayDetailTitle");
+const dayDetailClose = document.getElementById("dayDetailClose");
+const dayDetailContent = document.getElementById("dayDetailContent");
 
 const medNewTreatment = document.getElementById("medNewTreatment");
 const medActiveBadge = document.getElementById("medActiveBadge");
@@ -103,6 +151,8 @@ let medicationCache = {
   treatments: [],
   byId: new Map(),
 };
+let healthCache = { events: [], eventById: new Map(), affectedHabitIdsByEvent: new Map(), habits: [] };
+let habitDayCache = { habits: [], checksByHabit: new Map(), date: "", dailyNote: null };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PASSWORD_MIN_LENGTH = 6;
@@ -572,7 +622,18 @@ async function handleAuthRedirectResult() {
 
 function loadPreferredTab() {
   const stored = localStorage.getItem(TAB_KEY);
+  if (stored === "medicationPanel") return "healthPanel";
   return TAB_IDS.includes(stored) ? stored : "todayPanel";
+}
+
+function setActiveHealthSubpanel(targetId) {
+  const validTarget = targetId === "medicationPanel" ? "medicationPanel" : "healthEventsPanel";
+  for (const panel of healthPanel.querySelectorAll(".health-subpanel")) {
+    panel.classList.toggle("hidden", panel.id !== validTarget);
+  }
+  for (const button of healthPanel.querySelectorAll("button[data-health-target]")) {
+    button.classList.toggle("is-active", button.dataset.healthTarget === validTarget);
+  }
 }
 
 function setPreferredTab(tabId) {
@@ -717,7 +778,7 @@ function renderWeightTable(records) {
   contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
 }
 
-function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesCountByHabit, date) {
+function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, statsByHabit, date) {
   if (habits.length === 0) {
     habitsTable.innerHTML = '<tr class="empty"><td colspan="2">Aun no hay habitos creados.</td></tr>';
     habitCounter.textContent = "0 habitos";
@@ -727,34 +788,34 @@ function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesC
 
   let yesCount = 0;
   let noCount = 0;
+  let notApplicableCount = 0;
   let pendingCount = 0;
 
   const rows = habits
     .map((habit) => {
       const habitId = Number(habit.id);
-      const status = selectedStatusByHabit.has(habitId) ? selectedStatusByHabit.get(habitId) : null;
+      const selectedCheck = selectedCheckByHabit.get(habitId) || null;
+      const status = selectedCheck ? Number(selectedCheck.status) : null;
 
       if (status === 1) yesCount += 1;
       if (status === 0) noCount += 1;
+      if (status === 2) notApplicableCount += 1;
       if (status === null) pendingCount += 1;
 
       const yesActive = status === 1 ? "is-active" : "";
       const noActive = status === 0 ? "is-active" : "";
 
-      const createdDate = (habit.created_at || "").slice(0, 10);
-      const totalDays = createdDate ? inclusiveDayDistance(createdDate, date) : 0;
-      const yesDays = yesCountByHabit.get(habitId) || 0;
-      const percentage = totalDays > 0 ? Math.round((yesDays / totalDays) * 100) : 0;
-      const progressLabel =
-        totalDays > 0 ? `${yesDays}/${totalDays} dias · ${percentage}%` : "No existia en esta fecha";
+      const stats = statsByHabit.get(habitId) || { completed: 0, denominator: 0, notApplicable: 0 };
+      const percentage = stats.denominator > 0 ? Math.round((stats.completed / stats.denominator) * 100) : 0;
+      const progressLabel = stats.denominator > 0 ? `${stats.completed}/${stats.denominator} registrados · ${percentage}%` : "Sin registros evaluables";
 
       const perDayStatus = statusByHabitDate.get(habitId) || new Map();
       const streakDots = [];
       for (let offset = 6; offset >= 0; offset -= 1) {
         const day = addDaysToDateString(date, -offset);
         const dayStatus = perDayStatus.has(day) ? Number(perDayStatus.get(day)) : null;
-        const dotClass = dayStatus === 1 ? "yes" : dayStatus === 0 ? "no" : "pending";
-        const dotLabel = dayStatus === 1 ? "Si" : dayStatus === 0 ? "No" : "Pendiente";
+        const dotClass = dayStatus === 1 ? "yes" : dayStatus === 0 ? "no" : dayStatus === 2 ? "not-applicable" : "pending";
+        const dotLabel = dayStatus === 1 ? "Si" : dayStatus === 0 ? "No" : dayStatus === 2 ? "No aplicable" : "Sin registro";
         streakDots.push(
           `<span class="streak-dot ${dotClass}" title="${day}: ${dotLabel}" aria-label="${day}: ${dotLabel}"></span>`
         );
@@ -783,6 +844,7 @@ function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesC
             <div class="habit-checks">
               <button type="button" class="habit-btn yes ${yesActive}" data-habit-id="${habit.id}" data-status="1">Si</button>
               <button type="button" class="habit-btn no ${noActive}" data-habit-id="${habit.id}" data-status="0">No</button>
+              <button type="button" class="habit-detail-btn" data-habit-detail="${habit.id}" aria-label="Añadir detalle a ${escapeHtml(habit.name)}">Detalle${selectedCheck && (selectedCheck.comment || selectedCheck.reason || selectedCheck.health_event_id || status === 2) ? '<span class="detail-indicator" aria-label="Tiene detalles">●</span>' : ""}</button>
             </div>
           </td>
         </tr>
@@ -793,7 +855,7 @@ function renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesC
   habitsTable.innerHTML = rows;
   bindRenderedHabitActions();
   habitCounter.textContent = `${habits.length} habito${habits.length === 1 ? "" : "s"}`;
-  habitSummary.textContent = `${date}: ${yesCount} si, ${noCount} no, ${pendingCount} pendientes.`;
+  habitSummary.textContent = `${date}: ${yesCount} si, ${noCount} no, ${notApplicableCount} no aplicables, ${pendingCount} sin registro.`;
 }
 
 function bindRenderedHabitActions() {
@@ -823,6 +885,137 @@ function bindRenderedHabitActions() {
       }
     });
   }
+
+  for (const button of habitsTable.querySelectorAll("button[data-habit-detail]")) {
+    button.addEventListener("click", () => openHabitDetail(Number(button.dataset.habitDetail)));
+  }
+}
+
+function closeModal(modal) {
+  modal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+
+function openModal(modal) {
+  modal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+
+function populateHabitHealthEventOptions(selectedId = "") {
+  const options = ['<option value="">Sin evento relacionado</option>', ...healthCache.events.map((event) => `<option value="${event.id}">${escapeHtml(event.title)} · ${healthStatusLabel(event.status)}</option>`)];
+  habitDetailHealthEvent.innerHTML = options.join("");
+  habitDetailHealthEvent.value = selectedId ? String(selectedId) : "";
+}
+
+function openHabitDetail(habitId) {
+  const habit = habitDayCache.habits.find((item) => Number(item.id) === Number(habitId));
+  if (!habit) return;
+  const check = habitDayCache.checksByHabit.get(Number(habitId)) || null;
+  habitDetailHabitId.value = String(habitId);
+  habitDetailTitle.textContent = `Detalle · ${habit.name}`;
+  habitDetailReason.value = check?.reason || "";
+  habitDetailComment.value = check?.comment || "";
+  habitDetailNotApplicable.checked = Number(check?.status) === 2;
+  populateHabitHealthEventOptions(check?.health_event_id || "");
+  const relatedActive = healthCache.events.find((event) => event.status !== "resolved" && (healthCache.affectedHabitIdsByEvent.get(Number(event.id)) || []).includes(Number(habitId)));
+  habitEventSuggestion.textContent = relatedActive ? `Evento activo relacionado: ${relatedActive.title}` : "";
+  habitEventSuggestion.classList.toggle("hidden", !relatedActive);
+  habitDetailError.textContent = "";
+  openModal(habitDetailModal);
+}
+
+async function saveHabitDetails(event) {
+  event.preventDefault();
+  const habitId = Number(habitDetailHabitId.value);
+  const existing = habitDayCache.checksByHabit.get(habitId) || null;
+  let status = existing == null ? null : Number(existing.status);
+  if (habitDetailNotApplicable.checked) status = 2;
+  if (status == null) {
+    habitDetailError.textContent = "Marca primero Si o No, o selecciona No aplicable.";
+    return;
+  }
+  if (status === 2 && !habitDetailNotApplicable.checked) {
+    habitDetailError.textContent = "Marca Si o No en la lista para sustituir el estado No aplicable.";
+    return;
+  }
+  const row = withCurrentUserId({ habit_id: habitId, log_date: habitDayCache.date, status, comment: nullableInput(habitDetailComment), reason: habitDetailReason.value || (status === 2 ? "not_applicable" : null), health_event_id: habitDetailHealthEvent.value ? Number(habitDetailHealthEvent.value) : null });
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?on_conflict=user_id,habit_id,log_date`, { method: "POST", headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }), body: JSON.stringify([row]) });
+    closeModal(habitDetailModal);
+    await refreshHabits();
+    setMessage("Detalles del habito guardados.");
+  } catch (error) {
+    habitDetailError.textContent = translateDataError(error.message);
+  }
+}
+
+async function clearHabitDetails() {
+  const habitId = Number(habitDetailHabitId.value);
+  const existing = habitDayCache.checksByHabit.get(habitId);
+  if (!existing) return closeModal(habitDetailModal);
+  const params = createUserScopedParams({ habit_id: `eq.${habitId}`, log_date: `eq.${habitDayCache.date}` });
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, { method: "PATCH", headers: authHeaders({ Prefer: "return=minimal" }), body: JSON.stringify({ comment: null, reason: Number(existing.status) === 2 ? "not_applicable" : null, health_event_id: null }) });
+    closeModal(habitDetailModal);
+    await refreshHabits();
+    setMessage("Detalles eliminados.");
+  } catch (error) {
+    habitDetailError.textContent = error.message;
+  }
+}
+
+function habitReasonLabel(value) {
+  return ({ health: "Salud", injury: "Lesion", fatigue: "Cansancio", stress: "Estres", lack_of_time: "Falta de tiempo", travel: "Viaje", social_event: "Evento social", emotional_event: "Evento emocional", not_applicable: "No aplicable", other: "Otro" })[value] || "";
+}
+
+function showDailyNoteModal() {
+  dailyNoteComment.value = habitDayCache.dailyNote?.comment || "";
+  dailyNoteError.textContent = "";
+  dailyNoteDelete.classList.toggle("hidden", !habitDayCache.dailyNote);
+  openModal(dailyNoteModal);
+}
+
+async function saveDailyNote(event) {
+  event.preventDefault();
+  const comment = dailyNoteComment.value.trim();
+  if (!comment) return void (dailyNoteError.textContent = "Escribe una nota o usa Eliminar nota.");
+  const row = withCurrentUserId({ note_date: habitDayCache.date, comment });
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/daily_notes?on_conflict=user_id,note_date`, { method: "POST", headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }), body: JSON.stringify([row]) });
+    closeModal(dailyNoteModal);
+    await refreshHabits();
+    setMessage("Nota del dia guardada.");
+  } catch (error) {
+    dailyNoteError.textContent = error.message;
+  }
+}
+
+async function deleteDailyNote() {
+  if (!habitDayCache.dailyNote || !confirm("¿Eliminar la nota de este dia?")) return;
+  const params = createUserScopedParams({ note_date: `eq.${habitDayCache.date}` });
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/daily_notes?${params.toString()}`, { method: "DELETE", headers: authHeaders() });
+    closeModal(dailyNoteModal);
+    await refreshHabits();
+    setMessage("Nota del dia eliminada.");
+  } catch (error) {
+    dailyNoteError.textContent = error.message;
+  }
+}
+
+function showDayDetail() {
+  dayDetailTitle.textContent = `Detalle · ${formatDateOnly(habitDayCache.date)}`;
+  const rows = habitDayCache.habits.map((habit) => {
+    const check = habitDayCache.checksByHabit.get(Number(habit.id));
+    const status = check == null ? null : Number(check.status);
+    const statusLabel = status === 1 ? "Realizado" : status === 0 ? "No realizado" : status === 2 ? "No aplicable" : "Sin registro";
+    const event = check?.health_event_id ? healthCache.eventById.get(Number(check.health_event_id)) : null;
+    const context = [check?.reason ? habitReasonLabel(check.reason) : "", event?.title || "", check?.comment || ""].filter(Boolean);
+    return `<article class="day-detail-row"><div><b>${escapeHtml(habit.name)}</b><span class="day-status day-status-${status == null ? "missing" : status}">${statusLabel}</span></div>${context.length ? `<p>${escapeHtml(context.join(" · "))}</p>` : ""}</article>`;
+  }).join("");
+  const note = habitDayCache.dailyNote ? `<article class="day-note"><b>Nota del dia</b><p>${escapeHtml(habitDayCache.dailyNote.comment)}</p></article>` : "";
+  dayDetailContent.innerHTML = `${note}${rows}`;
+  openModal(dayDetailModal);
 }
 
 function resetMedicationUI() {
@@ -905,6 +1098,172 @@ function renderTreatments(treatments) {
   medHistoryList.innerHTML = historical.length
     ? historical.map((item) => treatmentCard(item, true)).join("")
     : '<div class="empty-message">Aun no hay tratamientos finalizados o suspendidos.</div>';
+}
+
+function healthTypeLabel(value) {
+  return ({ injury: "Lesion", pain: "Dolor", illness: "Enfermedad", fatigue: "Cansancio", stress: "Estres", accident: "Accidente", medical_visit: "Consulta medica", emotional_event: "Evento emocional", other: "Otro" })[value] || "Otro";
+}
+
+function healthStatusLabel(value) {
+  return ({ active: "Activo", improving: "Mejorando", resolved: "Resuelto" })[value] || value;
+}
+
+function healthSeverityLabel(value) {
+  return ({ mild: "Leve", moderate: "Moderada", severe: "Alta" })[value] || "";
+}
+
+function resetHealthUI() {
+  healthCache = { events: [], eventById: new Map(), affectedHabitIdsByEvent: new Map(), habits: [] };
+  healthActiveBadge.textContent = "0 activos";
+  healthHistoryBadge.textContent = "0 eventos";
+  healthActiveList.innerHTML = '<div class="empty-message">No hay eventos activos.</div>';
+  healthHistoryList.innerHTML = '<div class="empty-message">Aun no hay eventos resueltos.</div>';
+}
+
+function healthEventCard(event, resolved) {
+  const severity = event.severity ? `<span>${healthSeverityLabel(event.severity)}</span>` : "";
+  const habits = healthCache.affectedHabitIdsByEvent.get(Number(event.id)) || [];
+  const habitNames = habits.map((id) => healthCache.habits.find((habit) => Number(habit.id) === Number(id))?.name).filter(Boolean);
+  const actions = resolved
+    ? `<button class="secondary" data-health-action="reopen" data-health-id="${event.id}" type="button">Reabrir</button>`
+    : `<button class="secondary" data-health-action="improve" data-health-id="${event.id}" type="button">Mejorando</button><button class="secondary" data-health-action="resolve" data-health-id="${event.id}" type="button">Resolver</button>`;
+  const duration = resolved && !event.end_date ? "-" : treatmentDuration({ start_date: event.start_date, end_date: event.end_date });
+  return `<article class="health-event-item">
+    <div class="med-item-main"><div><div class="med-name">${escapeHtml(event.title)}</div><div class="med-meta">${healthTypeLabel(event.type)}</div></div><span class="health-status health-status-${event.status}">${healthStatusLabel(event.status)}</span></div>
+    <div class="med-summary-grid"><div><b>Inicio</b><span>${formatDateOnly(event.start_date)}</span></div>${resolved ? `<div><b>Fin</b><span>${formatDateOnly(event.end_date)}</span></div>` : ""}<div><b>Duracion</b><span>${duration}</span></div>${severity ? `<div><b>Intensidad</b>${severity}</div>` : ""}</div>
+    ${habitNames.length ? `<div class="med-detail"><b>Habitos afectados:</b> ${escapeHtml(habitNames.join(", "))}</div>` : ""}
+    <div class="med-actions"><button class="ghost" data-health-action="edit" data-health-id="${event.id}" type="button">Editar</button>${actions}<button class="danger" data-health-action="delete" data-health-id="${event.id}" type="button">Eliminar</button></div>
+  </article>`;
+}
+
+function renderHealthEvents() {
+  const active = healthCache.events.filter((event) => event.status !== "resolved");
+  const history = healthCache.events.filter((event) => event.status === "resolved").sort((a, b) => b.start_date.localeCompare(a.start_date));
+  healthActiveBadge.textContent = `${active.length} activo${active.length === 1 ? "" : "s"}`;
+  healthHistoryBadge.textContent = `${history.length} evento${history.length === 1 ? "" : "s"}`;
+  healthActiveList.innerHTML = active.length ? active.map((event) => healthEventCard(event, false)).join("") : '<div class="empty-message">No hay eventos activos.</div>';
+  healthHistoryList.innerHTML = history.length ? history.map((event) => healthEventCard(event, true)).join("") : '<div class="empty-message">Aun no hay eventos resueltos.</div>';
+}
+
+function renderHealthHabitChoices(selectedIds = []) {
+  const selected = new Set(selectedIds.map(Number));
+  healthEventHabitChoices.innerHTML = healthCache.habits.length
+    ? healthCache.habits.map((habit) => `<label><input type="checkbox" value="${habit.id}" ${selected.has(Number(habit.id)) ? "checked" : ""} /> ${escapeHtml(habit.name)}</label>`).join("")
+    : '<span class="hint">No hay habitos disponibles.</span>';
+}
+
+async function fetchHealthEvents() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+  const params = createUserScopedParams({ select: "id,title,type,start_date,end_date,status,severity,description,created_at,updated_at", order: "start_date.desc,id.desc" });
+  return apiFetch(`${SUPABASE_URL}/rest/v1/health_events?${params.toString()}`, { method: "GET", headers: authHeaders() });
+}
+
+async function fetchHealthEventHabits() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+  const params = createUserScopedParams({ select: "health_event_id,habit_id" });
+  return apiFetch(`${SUPABASE_URL}/rest/v1/health_event_habits?${params.toString()}`, { method: "GET", headers: authHeaders() });
+}
+
+async function refreshHealthEvents() {
+  const [events, links, habits] = await Promise.all([fetchHealthEvents(), fetchHealthEventHabits(), fetchHabits()]);
+  const affectedHabitIdsByEvent = new Map();
+  for (const link of links) {
+    const eventId = Number(link.health_event_id);
+    if (!affectedHabitIdsByEvent.has(eventId)) affectedHabitIdsByEvent.set(eventId, []);
+    affectedHabitIdsByEvent.get(eventId).push(Number(link.habit_id));
+  }
+  healthCache = { events, eventById: new Map(events.map((event) => [Number(event.id), event])), affectedHabitIdsByEvent, habits };
+  renderHealthEvents();
+}
+
+function showHealthEventForm(event = null) {
+  healthEventForm.reset();
+  healthEventEditId.value = event?.id || "";
+  healthEventFormTitle.textContent = event ? "Editar evento" : "Nuevo evento";
+  healthEventTitle.value = event?.title || "";
+  healthEventType.value = event?.type || "injury";
+  healthEventStart.value = event?.start_date || todayLocalDateString();
+  healthEventEnd.value = event?.end_date || "";
+  healthEventStatus.value = event?.status || "active";
+  healthEventSeverity.value = event?.severity || "";
+  healthEventDescription.value = event?.description || "";
+  healthEventFormError.textContent = "";
+  renderHealthHabitChoices(event ? healthCache.affectedHabitIdsByEvent.get(Number(event.id)) || [] : []);
+  healthEventFormCard.classList.remove("hidden");
+  healthEventFormCard.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function hideHealthEventForm() {
+  healthEventFormCard.classList.add("hidden");
+  healthEventFormError.textContent = "";
+}
+
+async function syncHealthEventHabits(eventId) {
+  const params = createUserScopedParams({ health_event_id: `eq.${eventId}` });
+  await apiFetch(`${SUPABASE_URL}/rest/v1/health_event_habits?${params.toString()}`, { method: "DELETE", headers: authHeaders() });
+  const habitIds = Array.from(healthEventHabitChoices.querySelectorAll('input[type="checkbox"]:checked')).map((input) => Number(input.value));
+  if (!habitIds.length) return;
+  const rows = habitIds.map((habitId) => withCurrentUserId({ health_event_id: Number(eventId), habit_id: habitId }));
+  await apiFetch(`${SUPABASE_URL}/rest/v1/health_event_habits`, { method: "POST", headers: authHeaders({ Prefer: "return=minimal" }), body: JSON.stringify(rows) });
+}
+
+async function handleSaveHealthEvent(event) {
+  event.preventDefault();
+  const ok = await ensureAuthenticated("Inicia sesion para guardar eventos de salud.");
+  if (!ok) return;
+  const payload = { title: healthEventTitle.value.trim(), type: healthEventType.value, start_date: healthEventStart.value, end_date: healthEventEnd.value || null, status: healthEventStatus.value, severity: healthEventSeverity.value || null, description: nullableInput(healthEventDescription) };
+  if (!payload.title) return void (healthEventFormError.textContent = "El titulo es obligatorio.");
+  if (!payload.start_date) return void (healthEventFormError.textContent = "La fecha de inicio es obligatoria.");
+  if (payload.end_date && payload.end_date < payload.start_date) return void (healthEventFormError.textContent = "La fecha de fin no puede ser anterior al inicio.");
+  healthEventSubmit.disabled = true;
+  try {
+    let id = healthEventEditId.value;
+    if (id) {
+      const params = createUserScopedParams({ id: `eq.${id}` });
+      await apiFetch(`${SUPABASE_URL}/rest/v1/health_events?${params.toString()}`, { method: "PATCH", headers: authHeaders({ Prefer: "return=minimal" }), body: JSON.stringify(payload) });
+    } else {
+      const created = await apiFetch(`${SUPABASE_URL}/rest/v1/health_events`, { method: "POST", headers: authHeaders({ Prefer: "return=representation" }), body: JSON.stringify([withCurrentUserId(payload)]) });
+      id = created[0].id;
+    }
+    await syncHealthEventHabits(id);
+    hideHealthEventForm();
+    await refreshHealthEvents();
+    setMessage("Evento de salud guardado.");
+  } catch (error) {
+    healthEventFormError.textContent = error.message;
+  } finally {
+    healthEventSubmit.disabled = false;
+  }
+}
+
+async function patchHealthEvent(id, changes, message) {
+  const params = createUserScopedParams({ id: `eq.${id}` });
+  await apiFetch(`${SUPABASE_URL}/rest/v1/health_events?${params.toString()}`, { method: "PATCH", headers: authHeaders({ Prefer: "return=minimal" }), body: JSON.stringify(changes) });
+  await refreshHealthEvents();
+  setMessage(message);
+}
+
+async function handleHealthEventAction(action, id) {
+  const event = healthCache.eventById.get(Number(id));
+  if (!event) return;
+  if (action === "edit") return showHealthEventForm(event);
+  if (action === "improve") return patchHealthEvent(id, { status: "improving" }, "Evento marcado como mejorando.");
+  if (action === "reopen") return patchHealthEvent(id, { status: "active", end_date: null }, "Evento reabierto.");
+  if (action === "resolve") {
+    const endDate = prompt("Fecha de resolucion (AAAA-MM-DD, opcional)", event.end_date || todayLocalDateString());
+    if (endDate == null) return;
+    if (endDate && (!isValidDateOnly(endDate) || endDate < event.start_date)) return void setMessage("La fecha de resolucion no es valida.");
+    return patchHealthEvent(id, { status: "resolved", end_date: endDate || null }, "Evento resuelto.");
+  }
+  if (action === "delete") {
+    if (!confirm(`¿Eliminar el evento "${event.title}"?`)) return;
+    const params = createUserScopedParams({ id: `eq.${id}` });
+    await apiFetch(`${SUPABASE_URL}/rest/v1/health_events?${params.toString()}`, { method: "DELETE", headers: authHeaders() });
+    await refreshHealthEvents();
+    setMessage("Evento eliminado.");
+  }
 }
 
 function resetReportsUI() {
@@ -1051,6 +1410,7 @@ function setAuthenticatedUI(isAuthenticated, options = {}) {
   resetTabStatus();
   renderWeightTable([]);
   renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
+  resetHealthUI();
   resetMedicationUI();
   resetReportsUI();
   if (shouldResetAuthForm) resetAuthForm();
@@ -1117,7 +1477,7 @@ async function fetchHabitChecksUntil(logDate) {
   if (!currentSession) return [];
 
   const params = createUserScopedParams({
-    select: "habit_id,status,log_date",
+    select: "id,habit_id,status,log_date,comment,reason,health_event_id,created_at,updated_at",
     log_date: `lte.${logDate}`,
     order: "log_date.asc,habit_id.asc,id.asc",
   });
@@ -1136,7 +1496,7 @@ async function fetchHabitChecksAll() {
   if (!currentSession) return [];
 
   const params = createUserScopedParams({
-    select: "habit_id,status,log_date",
+    select: "id,habit_id,status,log_date,comment,reason,health_event_id,created_at,updated_at",
     order: "log_date.asc,habit_id.asc,id.asc",
   });
 
@@ -1147,6 +1507,21 @@ async function fetchHabitChecksAll() {
       Authorization: `Bearer ${currentSession.access_token}`,
     },
   });
+}
+
+async function fetchDailyNote(date) {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return null;
+  const params = createUserScopedParams({ select: "id,note_date,comment,created_at,updated_at", note_date: `eq.${date}`, limit: "1" });
+  const rows = await apiFetch(`${SUPABASE_URL}/rest/v1/daily_notes?${params.toString()}`, { method: "GET", headers: authHeaders() });
+  return rows[0] || null;
+}
+
+async function fetchDailyNotesAll() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+  const params = createUserScopedParams({ select: "id,note_date,comment,created_at,updated_at", order: "note_date.asc" });
+  return apiFetchAllRows(`${SUPABASE_URL}/rest/v1/daily_notes?${params.toString()}`, { method: "GET", headers: authHeaders() });
 }
 
 async function fetchPrescribedMedications() {
@@ -1326,11 +1701,11 @@ async function refreshHabits() {
   const logDate = getSelectedHabitDate();
   const today = todayLocalDateString();
   const fetchUntilDate = logDate > today ? logDate : today;
-  const [habits, checksUntilDate] = await Promise.all([fetchHabits(), fetchHabitChecksUntil(fetchUntilDate)]);
+  const [habits, checksUntilDate, dailyNote] = await Promise.all([fetchHabits(), fetchHabitChecksUntil(fetchUntilDate), fetchDailyNote(logDate)]);
 
-  const selectedStatusByHabit = new Map();
+  const selectedCheckByHabit = new Map();
   const statusByHabitDate = new Map();
-  const yesCountByHabit = new Map();
+  const statsByHabit = new Map();
 
   for (const check of checksUntilDate) {
     const habitId = Number(check.habit_id);
@@ -1341,15 +1716,20 @@ async function refreshHabits() {
     statusByHabitDate.get(habitId).set(day, status);
 
     if (day === logDate) {
-      selectedStatusByHabit.set(habitId, status);
+      selectedCheckByHabit.set(habitId, check);
     }
 
-    if (status === 1) {
-      yesCountByHabit.set(habitId, (yesCountByHabit.get(habitId) || 0) + 1);
-    }
+    if (!statsByHabit.has(habitId)) statsByHabit.set(habitId, { completed: 0, denominator: 0, notApplicable: 0 });
+    const stats = statsByHabit.get(habitId);
+    if (status === 1) { stats.completed += 1; stats.denominator += 1; }
+    if (status === 0) stats.denominator += 1;
+    if (status === 2) stats.notApplicable += 1;
   }
 
-  renderHabitTable(habits, selectedStatusByHabit, statusByHabitDate, yesCountByHabit, logDate);
+  habitDayCache = { habits, checksByHabit: selectedCheckByHabit, date: logDate, dailyNote };
+  dailyNoteIndicator.classList.toggle("hidden", !dailyNote);
+  openDailyNote.textContent = dailyNote ? "Editar nota del dia" : "Añadir nota del dia";
+  renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, statsByHabit, logDate);
 
   const activeHabitsToday = habits.filter((habit) => {
     const createdDate = (habit.created_at || "").slice(0, 10);
@@ -1357,24 +1737,28 @@ async function refreshHabits() {
   });
 
   let habitsDoneToday = 0;
+  let habitsEvaluableToday = 0;
   for (const habit of activeHabitsToday) {
     const habitStatuses = statusByHabitDate.get(Number(habit.id));
     if (!habitStatuses) continue;
-    if (Number(habitStatuses.get(today)) === 1) habitsDoneToday += 1;
+    const todayStatus = Number(habitStatuses.get(today));
+    if (todayStatus === 1) { habitsDoneToday += 1; habitsEvaluableToday += 1; }
+    if (todayStatus === 0) habitsEvaluableToday += 1;
   }
 
   tabStatusState = {
     ...tabStatusState,
     habitsDone: habitsDoneToday,
-    habitsTotal: activeHabitsToday.length,
+    habitsTotal: habitsEvaluableToday,
   };
   renderTabStatus();
 }
 
 async function refreshAllData() {
-  const [weightsResult, habitsResult, medicationResult, reportsResult] = await Promise.allSettled([
+  const [weightsResult, habitsResult, healthResult, medicationResult, reportsResult] = await Promise.allSettled([
     refreshWeights(),
     refreshHabits(),
+    refreshHealthEvents(),
     refreshMedications(),
     refreshReports(),
   ]);
@@ -1400,11 +1784,13 @@ async function refreshAllData() {
     renderTabStatus();
     const missingTables =
       detail.includes('relation "habits" does not exist') ||
-      detail.includes('relation "habit_checks" does not exist');
+      detail.includes('relation "habit_checks" does not exist') ||
+      detail.includes('relation "daily_notes" does not exist') ||
+      detail.includes('column habit_checks.comment does not exist');
 
     if (missingTables) {
-      setStatus("Falta crear tablas de habitos en Supabase. Ejecuta supabase_habits.sql.");
-      habitSummary.textContent = "Pendiente: ejecutar SQL de habitos en Supabase.";
+      setStatus("Falta aplicar la migracion de salud y habitos. Ejecuta supabase_health_events.sql.");
+      habitSummary.textContent = "Pendiente: ejecutar la migracion de salud en Supabase.";
       habitsTable.innerHTML =
         '<tr class="empty"><td colspan="2">Habitos no disponible hasta crear tablas.</td></tr>';
       habitCounter.textContent = "0 habitos";
@@ -1425,6 +1811,17 @@ async function refreshAllData() {
     }
   }
 
+  if (healthResult.status === "rejected") {
+    const detail = healthResult.reason.message || "error desconocido";
+    const missingTables = detail.includes('relation "health_events" does not exist') || detail.includes('relation "health_event_habits" does not exist') || detail.includes('relation "daily_notes" does not exist');
+    if (missingTables) {
+      setStatus("Falta aplicar la migracion de salud. Ejecuta supabase_health_events.sql.");
+      resetHealthUI();
+    } else {
+      setStatus(`Error en eventos de salud: ${detail}`);
+    }
+  }
+
   if (reportsResult.status === "rejected") {
     const detail = reportsResult.reason.message || "error desconocido";
     const missingTable = detail.includes('relation "weekly_reports" does not exist');
@@ -1440,6 +1837,7 @@ async function refreshAllData() {
   if (
     weightsResult.status === "fulfilled" &&
     habitsResult.status === "fulfilled" &&
+    healthResult.status === "fulfilled" &&
     medicationResult.status === "fulfilled" &&
     reportsResult.status === "fulfilled"
   ) {
@@ -1685,13 +2083,16 @@ async function handleExportHabits() {
       return [
         check.log_date,
         habit ? habit.name : `Habito ${check.habit_id}`,
-        Number(check.status) === 1 ? "yes" : "no",
+        Number(check.status) === 1 ? "completed" : Number(check.status) === 2 ? "not_applicable" : "not_completed",
         habit ? habit.description : "",
+        check.reason || "",
+        check.comment || "",
+        check.health_event_id || "",
       ]
         .map(escapeCSVCell)
         .join(",");
     });
-    const csv = ["date,habit,status,description", ...rows].join("\n");
+    const csv = ["date,habit,status,description,reason,comment,health_event_id", ...rows].join("\n");
     const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1710,10 +2111,13 @@ async function handleExportAllData() {
   if (!ok) return;
 
   try {
-    const [weights, habits, habitChecks, prescribedMedications] = await Promise.all([
+    const [weights, habits, habitChecks, healthEvents, healthEventHabits, dailyNotes, prescribedMedications] = await Promise.all([
       fetchWeightRecords(),
       fetchHabits(),
       fetchHabitChecksAll(),
+      fetchHealthEvents(),
+      fetchHealthEventHabits(),
+      fetchDailyNotesAll(),
       fetchPrescribedMedications(),
     ]);
 
@@ -1723,6 +2127,9 @@ async function handleExportAllData() {
       weights,
       habits,
       habit_checks: habitChecks,
+      health_events: healthEvents,
+      health_event_habits: healthEventHabits,
+      daily_notes: dailyNotes,
       prescribed_medications: prescribedMedications,
     };
 
@@ -1875,6 +2282,8 @@ async function upsertHabitStatus(habitId, status) {
     log_date: logDate,
     status: Number(status),
   });
+  const currentCheck = habitDayCache.checksByHabit.get(Number(habitId));
+  if (currentCheck?.reason === "not_applicable" && Number(status) !== 2) row.reason = null;
 
   try {
     await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?on_conflict=user_id,habit_id,log_date`, {
@@ -1924,7 +2333,7 @@ async function saveHabitStatusWithoutUpsert(row) {
     await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?id=eq.${existingId}`, {
       method: "PATCH",
       headers: authHeaders({ Prefer: "return=minimal" }),
-      body: JSON.stringify({ status: row.status }),
+      body: JSON.stringify({ status: row.status, ...(Object.prototype.hasOwnProperty.call(row, "reason") ? { reason: row.reason } : {}) }),
     });
     return;
   }
@@ -1982,6 +2391,13 @@ function bindEvents() {
     });
   }
 
+  if (healthPanel) {
+    healthPanel.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-health-target]");
+      if (button) setActiveHealthSubpanel(button.dataset.healthTarget);
+    });
+  }
+
   if (menuToggle) {
     menuToggle.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -2018,7 +2434,10 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeHeaderMenu();
+    if (event.key === "Escape") {
+      closeHeaderMenu();
+      for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal]) closeModal(modal);
+    }
   });
 
   guardarBtn.addEventListener("click", async () => {
@@ -2084,6 +2503,31 @@ function bindEvents() {
     }
   });
 
+  healthEventNew.addEventListener("click", () => showHealthEventForm());
+  healthEventCancel.addEventListener("click", hideHealthEventForm);
+  healthEventForm.addEventListener("submit", handleSaveHealthEvent);
+  const healthActionHandler = async (event) => {
+    const button = event.target.closest("button[data-health-action][data-health-id]");
+    if (!button) return;
+    try { await handleHealthEventAction(button.dataset.healthAction, button.dataset.healthId); }
+    catch (error) { setMessage(`No se pudo modificar el evento: ${error.message}`); }
+  };
+  healthActiveList.addEventListener("click", healthActionHandler);
+  healthHistoryList.addEventListener("click", healthActionHandler);
+
+  habitDetailClose.addEventListener("click", () => closeModal(habitDetailModal));
+  habitDetailForm.addEventListener("submit", saveHabitDetails);
+  habitDetailClear.addEventListener("click", clearHabitDetails);
+  openDailyNote.addEventListener("click", showDailyNoteModal);
+  dailyNoteClose.addEventListener("click", () => closeModal(dailyNoteModal));
+  dailyNoteForm.addEventListener("submit", saveDailyNote);
+  dailyNoteDelete.addEventListener("click", deleteDailyNote);
+  openDayDetail.addEventListener("click", showDayDetail);
+  dayDetailClose.addEventListener("click", () => closeModal(dayDetailModal));
+  for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal]) {
+    modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(modal); });
+  }
+
   medNewTreatment.addEventListener("click", () => showMedicationForm());
   medFormCancel.addEventListener("click", hideMedicationForm);
   medStatus.addEventListener("change", updateMedicationFormVisibility);
@@ -2126,6 +2570,7 @@ async function init() {
   const today = todayLocalDateString();
   habitDateInput.value = today;
   medStartDate.value = today;
+  healthEventStart.value = today;
   setAuthMode("login");
   updateMedicationFormVisibility();
   updateNow();
@@ -2133,6 +2578,7 @@ async function init() {
   resetTabStatus();
   bindEvents();
   setActiveTab(loadPreferredTab());
+  setActiveHealthSubpanel("healthEventsPanel");
 
   const handledRedirect = await handleAuthRedirectResult();
   if (handledRedirect) return;

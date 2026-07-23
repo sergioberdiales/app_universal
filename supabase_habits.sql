@@ -44,8 +44,12 @@ create table if not exists public.habit_checks (
   user_id uuid not null references auth.users(id) on delete cascade,
   habit_id bigint not null references public.habits(id) on delete cascade,
   log_date date not null,
-  status smallint not null check (status in (0, 1)),
+  status smallint not null check (status in (0, 1, 2)),
+  comment text,
+  reason text check (reason is null or reason in ('health', 'injury', 'fatigue', 'stress', 'lack_of_time', 'travel', 'social_event', 'emotional_event', 'not_applicable', 'other')),
+  health_event_id bigint,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique (user_id, habit_id, log_date)
 );
 

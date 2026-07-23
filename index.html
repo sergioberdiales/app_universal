@@ -17,7 +17,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=pwa-20260424a" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=pwa-20260424a" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=pwa-20260424a" />
-    <link rel="stylesheet" href="styles.css?v=prescriptions-20260723" />
+    <link rel="stylesheet" href="styles.css?v=health-context-20260723" />
   </head>
   <body>
     <div class="bg"></div>
@@ -50,12 +50,11 @@
             <span class="tab-label">Habitos</span>
             <span class="tab-inline" id="tabHabitsProgress">0/0</span>
           </button>
+          <button type="button" class="tab-btn" data-tab-target="healthPanel">
+            <span class="tab-label">Salud</span>
+          </button>
           <button type="button" class="tab-btn" data-tab-target="weightPanel">
             <span class="tab-label">Peso</span>
-          </button>
-          <button type="button" class="tab-btn" data-tab-target="medicationPanel">
-            <span class="tab-label">Medicamentos</span>
-            <span id="tabMedicationStatusText" class="tab-inline">0 activos</span>
           </button>
           <button type="button" class="tab-btn" data-tab-target="reportsPanel">
             <span class="tab-label">Informes</span>
@@ -129,6 +128,11 @@
               </label>
               <p id="habitSummary" class="hint">Sin registro diario aun.</p>
             </div>
+            <div class="daily-secondary-actions">
+              <button id="openDayDetail" class="ghost" type="button">Ver detalle del dia</button>
+              <button id="openDailyNote" class="ghost" type="button">Añadir nota del dia</button>
+              <span id="dailyNoteIndicator" class="detail-indicator hidden" title="Este dia tiene una nota">●</span>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -172,8 +176,7 @@
                 </div>
               </div>
               <p class="hint">
-                El CSV usa el formato: <span class="mono">date,habit,status,description</span>
-                (status: yes o no).
+                El CSV incluye estado, motivo, comentario y evento de salud relacionado.
               </p>
             </details>
           </section>
@@ -241,7 +244,48 @@
           </section>
         </section>
 
-        <section id="medicationPanel" class="panel hidden">
+        <section id="healthPanel" class="panel hidden">
+          <nav class="health-subnav" aria-label="Secciones de salud">
+            <button type="button" class="health-subnav-btn is-active" data-health-target="healthEventsPanel">Eventos de salud</button>
+            <button type="button" class="health-subnav-btn" data-health-target="medicationPanel">
+              Medicamentos prescritos <span id="tabMedicationStatusText" class="tab-inline">0 activos</span>
+            </button>
+          </nav>
+
+          <section id="healthEventsPanel" class="health-subpanel">
+            <section class="card">
+              <div class="table-header">
+                <div><h2>Eventos de salud</h2><p class="subtitle">Contexto opcional para comprender cambios en tus habitos.</p></div>
+                <button id="healthEventNew" class="primary" type="button">+ Nuevo evento</button>
+              </div>
+              <div class="med-block">
+                <div class="table-header"><h3>Eventos activos</h3><span id="healthActiveBadge" class="chip">0 activos</span></div>
+                <div id="healthActiveList" class="health-event-list"><div class="empty-message">No hay eventos activos.</div></div>
+              </div>
+            </section>
+            <section class="card">
+              <div class="table-header"><h2>Historial</h2><span id="healthHistoryBadge" class="chip">0 eventos</span></div>
+              <div id="healthHistoryList" class="health-event-list"><div class="empty-message">Aun no hay eventos resueltos.</div></div>
+            </section>
+            <section id="healthEventFormCard" class="card hidden">
+              <div class="table-header"><h2 id="healthEventFormTitle">Nuevo evento</h2><button id="healthEventCancel" class="ghost" type="button">Cancelar</button></div>
+              <form id="healthEventForm" class="health-event-form" novalidate>
+                <input id="healthEventEditId" type="hidden" />
+                <label class="field"><span>Titulo *</span><input id="healthEventTitle" type="text" required /></label>
+                <label class="field"><span>Tipo *</span><select id="healthEventType"><option value="injury">Lesion</option><option value="pain">Dolor</option><option value="illness">Enfermedad</option><option value="fatigue">Cansancio</option><option value="stress">Estres</option><option value="accident">Accidente</option><option value="medical_visit">Consulta medica</option><option value="emotional_event">Evento emocional</option><option value="other">Otro</option></select></label>
+                <label class="field"><span>Inicio *</span><input id="healthEventStart" type="date" required /></label>
+                <label class="field"><span>Fin</span><input id="healthEventEnd" type="date" /></label>
+                <label class="field"><span>Estado</span><select id="healthEventStatus"><option value="active">Activo</option><option value="improving">Mejorando</option><option value="resolved">Resuelto</option></select></label>
+                <label class="field"><span>Intensidad</span><select id="healthEventSeverity"><option value="">Sin indicar</option><option value="mild">Leve</option><option value="moderate">Moderada</option><option value="severe">Alta</option></select></label>
+                <fieldset class="habit-link-field health-form-wide"><legend>Habitos afectados (opcional)</legend><div id="healthEventHabitChoices" class="habit-choice-list"></div></fieldset>
+                <label class="field health-form-wide"><span>Descripcion</span><textarea id="healthEventDescription" rows="4"></textarea></label>
+                <div id="healthEventFormError" class="form-error health-form-wide" role="alert"></div>
+                <div class="health-form-actions health-form-wide"><button id="healthEventSubmit" class="primary" type="submit">Guardar evento</button></div>
+              </form>
+            </section>
+          </section>
+
+          <section id="medicationPanel" class="health-subpanel hidden">
           <section class="card">
             <div class="table-header">
               <div>
@@ -295,6 +339,7 @@
               <div class="med-form-actions med-form-wide"><button id="medFormSubmit" class="primary" type="submit">Guardar tratamiento</button></div>
             </form>
           </section>
+          </section>
         </section>
 
         <section id="reportsPanel" class="panel hidden">
@@ -323,7 +368,31 @@
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app-20260606b.js?v=prescriptions-20260723"></script>
+    <div id="habitDetailModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="habitDetailTitle">
+      <section class="modal-card">
+        <div class="table-header"><h2 id="habitDetailTitle">Detalle del habito</h2><button id="habitDetailClose" class="ghost" type="button">Cerrar</button></div>
+        <form id="habitDetailForm" class="detail-form">
+          <input id="habitDetailHabitId" type="hidden" />
+          <label class="field"><span>Motivo</span><select id="habitDetailReason"><option value="">Sin motivo</option><option value="health">Salud</option><option value="injury">Lesion</option><option value="fatigue">Cansancio</option><option value="stress">Estres</option><option value="lack_of_time">Falta de tiempo</option><option value="travel">Viaje</option><option value="social_event">Evento social</option><option value="emotional_event">Evento emocional</option><option value="not_applicable">No aplicable</option><option value="other">Otro</option></select></label>
+          <label class="field"><span>Evento de salud</span><select id="habitDetailHealthEvent"><option value="">Sin evento relacionado</option></select></label>
+          <p id="habitEventSuggestion" class="hint hidden"></p>
+          <label class="field"><span>Comentario breve</span><textarea id="habitDetailComment" rows="3"></textarea></label>
+          <label class="secondary-status-action"><input id="habitDetailNotApplicable" type="checkbox" /> Marcar como no aplicable</label>
+          <div id="habitDetailError" class="form-error" role="alert"></div>
+          <div class="modal-actions"><button id="habitDetailClear" class="ghost" type="button">Quitar detalles</button><button class="primary" type="submit">Guardar detalles</button></div>
+        </form>
+      </section>
+    </div>
+
+    <div id="dailyNoteModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dailyNoteTitle">
+      <section class="modal-card"><div class="table-header"><h2 id="dailyNoteTitle">Nota del dia</h2><button id="dailyNoteClose" class="ghost" type="button">Cerrar</button></div><form id="dailyNoteForm" class="detail-form"><label class="field"><span>Comentario</span><textarea id="dailyNoteComment" rows="5"></textarea></label><div id="dailyNoteError" class="form-error" role="alert"></div><div class="modal-actions"><button id="dailyNoteDelete" class="danger" type="button">Eliminar nota</button><button class="primary" type="submit">Guardar nota</button></div></form></section>
+    </div>
+
+    <div id="dayDetailModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dayDetailTitle">
+      <section class="modal-card modal-card-wide"><div class="table-header"><h2 id="dayDetailTitle">Detalle del dia</h2><button id="dayDetailClose" class="ghost" type="button">Cerrar</button></div><div id="dayDetailContent" class="day-detail-content"></div></section>
+    </div>
+
+    <script src="app-20260606b.js?v=health-context-20260723"></script>
     <script src="pwa.js?v=pwa-20260424a"></script>
   </body>
 </html>

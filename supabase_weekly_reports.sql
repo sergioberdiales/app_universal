@@ -113,7 +113,7 @@ begin
     select
       h.id as habit_id,
       h.name,
-      greatest(0, p_week_end - greatest(p_week_start, (h.created_at at time zone p_tz)::date) + 1)::int as target_count,
+      coalesce(sum(case when hc.status in (0, 1) then 1 else 0 end), 0)::int as target_count,
       coalesce(sum(case when hc.status = 1 then 1 else 0 end), 0)::int as done_count
     from public.habits h
     left join public.habit_checks hc
@@ -174,7 +174,7 @@ begin
   with habit_base as (
     select
       h.id as habit_id,
-      greatest(0, v_prev_week_end - greatest(v_prev_week_start, (h.created_at at time zone p_tz)::date) + 1)::int as target_count,
+      coalesce(sum(case when hc.status in (0, 1) then 1 else 0 end), 0)::int as target_count,
       coalesce(sum(case when hc.status = 1 then 1 else 0 end), 0)::int as done_count
     from public.habits h
     left join public.habit_checks hc
@@ -195,7 +195,14 @@ begin
     select
       h.id as habit_id,
       h.name,
-      greatest(0, p_week_end - (h.created_at at time zone p_tz)::date + 1)::int as target_count,
+      (
+        select count(*)::int
+        from public.habit_checks hc
+        where hc.user_id = p_user_id
+          and hc.habit_id = h.id
+          and hc.status in (0, 1)
+          and hc.log_date <= p_week_end
+      ) as target_count,
       (
         select count(*)::int
         from public.habit_checks hc

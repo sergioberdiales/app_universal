@@ -17,7 +17,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=pwa-20260424a" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=pwa-20260424a" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=pwa-20260424a" />
-    <link rel="stylesheet" href="styles.css?v=header-tight-20260423" />
+    <link rel="stylesheet" href="styles.css?v=prescriptions-20260723" />
   </head>
   <body>
     <div class="bg"></div>
@@ -54,9 +54,8 @@
             <span class="tab-label">Peso</span>
           </button>
           <button type="button" class="tab-btn" data-tab-target="medicationPanel">
-            <span class="tab-label">Medicaciones</span>
-            <span id="tabMedicationDot" class="med-dot is-red" aria-hidden="true"></span>
-            <span id="tabMedicationStatusText" class="sr-only">Sin registros</span>
+            <span class="tab-label">Medicamentos</span>
+            <span id="tabMedicationStatusText" class="tab-inline">0 activos</span>
           </button>
           <button type="button" class="tab-btn" data-tab-target="reportsPanel">
             <span class="tab-label">Informes</span>
@@ -245,93 +244,56 @@
         <section id="medicationPanel" class="panel hidden">
           <section class="card">
             <div class="table-header">
-              <h2>Medicaciones de hoy</h2>
-              <span id="medTodayBadge" class="chip">0 programadas pendientes</span>
-            </div>
-
-            <div class="med-block">
-              <h3>Programadas</h3>
-              <div id="medScheduledList" class="med-list">
-                <div class="empty-message">No hay medicaciones programadas activas.</div>
+              <div>
+                <h2>Medicamentos prescritos</h2>
+                <p class="subtitle">Historial de periodos prescritos. No registra tomas ni implica adherencia.</p>
               </div>
+              <button id="medNewTreatment" class="primary" type="button">+ Nuevo tratamiento</button>
             </div>
 
             <div class="med-block">
-              <h3>A demanda (extra)</h3>
-              <div id="medPrnList" class="med-list">
-                <div class="empty-message">No hay medicaciones a demanda activas.</div>
+              <div class="table-header">
+                <h3>Tratamientos activos</h3>
+                <span id="medActiveBadge" class="chip">0 activos</span>
+              </div>
+              <div id="medActiveList" class="med-list">
+                <div class="empty-message">No hay tratamientos activos.</div>
               </div>
             </div>
           </section>
 
           <section class="card">
             <div class="table-header">
-              <h2>Historial</h2>
-            </div>
-            <div class="med-filters">
-              <label class="field">
-                <span>Medicacion</span>
-                <select id="medHistoryMedication">
-                  <option value="">Todas</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Tipo</span>
-                <select id="medHistorySource">
-                  <option value="">Todos</option>
-                  <option value="scheduled">Programada</option>
-                  <option value="extra">Extra</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Desde</span>
-                <input id="medHistoryFrom" type="date" />
-              </label>
-              <label class="field">
-                <span>Hasta</span>
-                <input id="medHistoryTo" type="date" />
-              </label>
-              <button id="medHistoryApply" class="ghost" type="button">Aplicar filtros</button>
+              <h2>Historial de tratamientos</h2>
+              <span id="medHistoryBadge" class="chip">0 periodos</span>
             </div>
             <div id="medHistoryList" class="med-history-list">
-              <div class="empty-message">Aun no hay eventos de medicacion.</div>
+              <div class="empty-message">Aun no hay tratamientos finalizados o suspendidos.</div>
             </div>
           </section>
 
-          <section class="card">
-            <details id="medCreateDetails">
-              <summary>Registrar nuevo tratamiento</summary>
-              <div class="med-create-form">
-                <label class="field">
-                  <span>Medicacion</span>
-                  <input id="medCreateName" type="text" placeholder="Ej: Ibuprofeno" />
-                </label>
-                <label class="field">
-                  <span>Tipo</span>
-                  <select id="medCreateType">
-                    <option value="scheduled">Programada</option>
-                    <option value="prn">A demanda (extra)</option>
-                  </select>
-                </label>
-                <label class="field" id="medCreateWindowField">
-                  <span>Ventana</span>
-                  <select id="medCreateWindow">
-                    <option value="morning">Manana</option>
-                    <option value="afternoon">Tarde</option>
-                    <option value="night">Noche</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Inicio</span>
-                  <input id="medCreateStart" type="date" />
-                </label>
-                <label class="field med-create-notes">
-                  <span>Notas (opcional)</span>
-                  <input id="medCreateNotes" type="text" placeholder="Ej: despues de comer" />
-                </label>
-                <button id="medCreateSubmit" class="primary" type="button">Guardar tratamiento</button>
-              </div>
-            </details>
+          <section id="medFormCard" class="card hidden" aria-labelledby="medFormTitle">
+            <div class="table-header">
+              <h2 id="medFormTitle">Nuevo tratamiento</h2>
+              <button id="medFormCancel" class="ghost" type="button">Cancelar</button>
+            </div>
+            <form id="medTreatmentForm" class="med-create-form" novalidate>
+              <input id="medEditId" type="hidden" />
+              <label class="field"><span>Nombre del medicamento *</span><input id="medName" type="text" required placeholder="Ej: Atorvastatina" /></label>
+              <label class="field"><span>Principio activo</span><input id="medActiveIngredient" type="text" /></label>
+              <label class="field"><span>Dosis</span><input id="medDose" type="text" placeholder="Ej: 20 mg" /></label>
+              <label class="field"><span>Frecuencia</span><input id="medFrequency" type="text" placeholder="Ej: una vez al dia" /></label>
+              <label class="field"><span>Fecha de inicio *</span><input id="medStartDate" type="date" required /></label>
+              <label class="field"><span>Fecha de fin</span><input id="medEndDate" type="date" /></label>
+              <label class="field"><span>Estado</span><select id="medStatus"><option value="active">Activo</option><option value="finished">Finalizado</option><option value="suspended">Suspendido</option></select></label>
+              <label class="field"><span>Motivo de prescripcion</span><input id="medReason" type="text" /></label>
+              <label class="field"><span>Prescriptor</span><input id="medPrescriber" type="text" placeholder="Medico, especialidad o centro" /></label>
+              <label id="medSuspensionReasonField" class="field hidden"><span>Motivo de suspension</span><input id="medSuspensionReason" type="text" /></label>
+              <label class="field med-form-wide"><span>Instrucciones de uso</span><textarea id="medInstructions" rows="3"></textarea></label>
+              <label class="field med-form-wide"><span>Notas</span><textarea id="medNotes" rows="3"></textarea></label>
+              <div id="medFormError" class="form-error med-form-wide" role="alert"></div>
+              <div class="med-form-actions med-form-wide"><button id="medFormSubmit" class="primary" type="submit">Guardar tratamiento</button></div>
+            </form>
           </section>
         </section>
 
@@ -361,7 +323,7 @@
       <div id="mensaje" class="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="app-20260606b.js"></script>
+    <script src="app-20260606b.js?v=prescriptions-20260723"></script>
     <script src="pwa.js?v=pwa-20260424a"></script>
   </body>
 </html>

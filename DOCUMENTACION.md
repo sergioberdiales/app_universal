@@ -8,8 +8,8 @@ Registro Personal es una aplicación web estática para llevar el seguimiento de
 
 - Hábitos diarios con respuestas Sí/No.
 - Peso.
-- Medicación programada y a demanda.
-- Informes semanales.
+- Historial de medicamentos prescritos por periodos.
+- Informes semanales de hábitos y peso.
 
 La aplicación se publica mediante GitHub Pages y utiliza Supabase para la
 autenticación y la persistencia de datos.
@@ -63,6 +63,16 @@ Cada fila de `habit_checks` contiene, entre otros, estos campos:
 La combinación `user_id`, `habit_id` y `log_date` debe ser única para poder
 actualizar el registro de un día mediante `upsert`.
 
+Los tratamientos farmacológicos se guardan en `prescribed_medications`, con
+una fila por periodo prescrito. Incluye nombre, dosis, frecuencia, fechas,
+estado y contexto clínico opcional. Un mismo medicamento puede tener varios
+periodos. Esta tabla no se relaciona con hábitos ni registra tomas diarias.
+
+Las tablas anteriores `medications`, `medication_plans` y
+`medication_intakes` se conservan temporalmente como legado y la aplicación ya
+no las consulta. No existe migración automática porque las tomas históricas no
+permiten deducir fechas reales de prescripción.
+
 ## Seguridad
 
 Las tablas deben tener RLS habilitado y políticas que permitan a cada usuario
@@ -73,6 +83,7 @@ Los scripts relacionados con la configuración de seguridad son:
 - `supabase_habit_checks_rls_fix.sql`
 - `supabase_rls_repair.sql`
 - `supabase_multiuser.sql`
+- `supabase_prescribed_medications.sql`
 
 El aviso de Supabase **Table publicly accessible** indica que alguna tabla del
 esquema `public` no tiene RLS habilitado. Debe corregirse, aunque no implica
@@ -276,4 +287,3 @@ Si vuelve a fallar el registro de hábitos:
 6. Revisar errores de red y consola.
 7. Consultar directamente en Supabase si existe la fila de `habit_checks`.
 8. Verificar las políticas RLS y el límite/paginación de la consulta.
-

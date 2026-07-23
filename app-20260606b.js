@@ -1,4 +1,4 @@
-// Build 2026-06-06b: paginate habit history and bypass stale PWA script caches.
+// Build 2026-07-23: medication prescriptions are stored as treatment periods.
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
@@ -13,7 +13,6 @@ const mensaje = document.getElementById("mensaje");
 const appDate = document.getElementById("appDate");
 const mainTabs = document.getElementById("mainTabs");
 const tabHabitsProgress = document.getElementById("tabHabitsProgress");
-const tabMedicationDot = document.getElementById("tabMedicationDot");
 const tabMedicationStatusText = document.getElementById("tabMedicationStatusText");
 const headerMenu = document.getElementById("headerMenu");
 const menuToggle = document.getElementById("menuToggle");
@@ -61,51 +60,51 @@ const habitSummary = document.getElementById("habitSummary");
 const newHabitDetails = document.getElementById("newHabitDetails");
 const exportHabitsBtn = document.getElementById("exportHabits");
 
-const medTodayBadge = document.getElementById("medTodayBadge");
-const medScheduledList = document.getElementById("medScheduledList");
-const medPrnList = document.getElementById("medPrnList");
-const medHistoryMedication = document.getElementById("medHistoryMedication");
-const medHistorySource = document.getElementById("medHistorySource");
-const medHistoryFrom = document.getElementById("medHistoryFrom");
-const medHistoryTo = document.getElementById("medHistoryTo");
-const medHistoryApply = document.getElementById("medHistoryApply");
+const medNewTreatment = document.getElementById("medNewTreatment");
+const medActiveBadge = document.getElementById("medActiveBadge");
+const medActiveList = document.getElementById("medActiveList");
+const medHistoryBadge = document.getElementById("medHistoryBadge");
 const medHistoryList = document.getElementById("medHistoryList");
-const medCreateName = document.getElementById("medCreateName");
-const medCreateType = document.getElementById("medCreateType");
-const medCreateWindowField = document.getElementById("medCreateWindowField");
-const medCreateWindow = document.getElementById("medCreateWindow");
-const medCreateStart = document.getElementById("medCreateStart");
-const medCreateNotes = document.getElementById("medCreateNotes");
-const medCreateSubmit = document.getElementById("medCreateSubmit");
-const medCreateDetails = document.getElementById("medCreateDetails");
+const medFormCard = document.getElementById("medFormCard");
+const medFormTitle = document.getElementById("medFormTitle");
+const medTreatmentForm = document.getElementById("medTreatmentForm");
+const medFormCancel = document.getElementById("medFormCancel");
+const medFormSubmit = document.getElementById("medFormSubmit");
+const medFormError = document.getElementById("medFormError");
+const medEditId = document.getElementById("medEditId");
+const medName = document.getElementById("medName");
+const medActiveIngredient = document.getElementById("medActiveIngredient");
+const medDose = document.getElementById("medDose");
+const medFrequency = document.getElementById("medFrequency");
+const medStartDate = document.getElementById("medStartDate");
+const medEndDate = document.getElementById("medEndDate");
+const medStatus = document.getElementById("medStatus");
+const medReason = document.getElementById("medReason");
+const medPrescriber = document.getElementById("medPrescriber");
+const medSuspensionReasonField = document.getElementById("medSuspensionReasonField");
+const medSuspensionReason = document.getElementById("medSuspensionReason");
+const medInstructions = document.getElementById("medInstructions");
+const medNotes = document.getElementById("medNotes");
 const reportsList = document.getElementById("reportsList");
 const reportDetail = document.getElementById("reportDetail");
 const reportGenerateNow = document.getElementById("reportGenerateNow");
 
 let currentSession = loadSession();
 let authMode = "login";
-let medicationSeedUserId = null;
 let tabStatusState = {
   habitsDone: 0,
   habitsTotal: 0,
-  medicationStatus: "none",
+  activeMedications: 0,
 };
 let isHeaderMenuOpen = false;
 let reportsCache = [];
 let selectedReportId = null;
 let medicationCache = {
-  medicationsAll: [],
-  medications: [],
-  plans: [],
-  plansById: new Map(),
-  medicationById: new Map(),
-  latestScheduledTodayByPlan: new Map(),
-  latestExtraByPlan: new Map(),
-  intakes: [],
+  treatments: [],
+  byId: new Map(),
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const EXTRA_SOFT_BRAKE_HOURS = 4;
 const PASSWORD_MIN_LENGTH = 6;
 
 function pad2(value) {
@@ -133,9 +132,11 @@ function addDaysToDateString(dateString, deltaDays) {
 }
 
 function inclusiveDayDistance(startDate, endDate) {
-  const start = parseDateOnly(startDate);
-  const end = parseDateOnly(endDate);
-  const diff = Math.floor((end.getTime() - start.getTime()) / DAY_MS);
+  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+  const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+  const start = Date.UTC(startYear, startMonth - 1, startDay);
+  const end = Date.UTC(endYear, endMonth - 1, endDay);
+  const diff = Math.floor((end - start) / DAY_MS);
   if (diff < 0) return 0;
   return diff + 1;
 }
@@ -173,18 +174,6 @@ function dayLabel(dateString) {
   return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`;
 }
 
-function sourceLabel(value) {
-  return value === "scheduled" ? "programada" : "extra";
-}
-
-function reasonLabel(value) {
-  if (value === "nervios") return "nervios";
-  if (value === "tics") return "tics";
-  if (value === "presentacion") return "presentacion";
-  if (value === "otro") return "otro";
-  return "";
-}
-
 function setHeaderDate(date = new Date()) {
   if (!appDate) return;
 
@@ -202,21 +191,9 @@ function renderTabStatus() {
     tabHabitsProgress.textContent = `${tabStatusState.habitsDone}/${tabStatusState.habitsTotal}`;
   }
 
-  if (tabMedicationDot) {
-    tabMedicationDot.classList.remove("is-green", "is-orange", "is-red");
-    let label = "Sin registros";
-    if (tabStatusState.medicationStatus === "complete") tabMedicationDot.classList.add("is-green");
-    else if (tabStatusState.medicationStatus === "partial") tabMedicationDot.classList.add("is-orange");
-    else tabMedicationDot.classList.add("is-red");
-    if (tabStatusState.medicationStatus === "complete") label = "Completado";
-    if (tabStatusState.medicationStatus === "partial") label = "Incompleto";
-    tabMedicationDot.title = `Medicaciones: ${label}`;
-  }
-
   if (tabMedicationStatusText) {
-    if (tabStatusState.medicationStatus === "complete") tabMedicationStatusText.textContent = "Completado";
-    else if (tabStatusState.medicationStatus === "partial") tabMedicationStatusText.textContent = "Incompleto";
-    else tabMedicationStatusText.textContent = "Sin registros";
+    const count = Number(tabStatusState.activeMedications || 0);
+    tabMedicationStatusText.textContent = `${count} activo${count === 1 ? "" : "s"}`;
   }
 }
 
@@ -224,7 +201,7 @@ function resetTabStatus() {
   tabStatusState = {
     habitsDone: 0,
     habitsTotal: 0,
-    medicationStatus: "none",
+    activeMedications: 0,
   };
   renderTabStatus();
 }
@@ -264,6 +241,12 @@ function formatDateOnly(dateString) {
   const [year, month, day] = dateString.split("-").map(Number);
   if (!year || !month || !day) return dateString;
   return `${pad2(day)}/${pad2(month)}/${year}`;
+}
+
+function isValidDateOnly(dateString) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
+  const date = parseDateOnly(dateString);
+  return !Number.isNaN(date.getTime()) && dateToDateOnlyString(date) === dateString;
 }
 
 function formatWeekLabel(startDate, endDate) {
@@ -340,9 +323,7 @@ function setSession(session) {
     localStorage.removeItem(SESSION_KEY);
   }
 
-  if (previousUserId !== nextUserId) {
-    medicationSeedUserId = null;
-  }
+  if (previousUserId !== nextUserId) resetMedicationUI();
 }
 
 function clearSession() {
@@ -846,201 +827,84 @@ function bindRenderedHabitActions() {
 
 function resetMedicationUI() {
   medicationCache = {
-    medicationsAll: [],
-    medications: [],
-    plans: [],
-    plansById: new Map(),
-    medicationById: new Map(),
-    latestScheduledTodayByPlan: new Map(),
-    latestExtraByPlan: new Map(),
-    intakes: [],
+    treatments: [],
+    byId: new Map(),
   };
-  medTodayBadge.textContent = "0 programadas pendientes";
-  medScheduledList.innerHTML = '<div class="empty-message">No hay medicaciones programadas activas.</div>';
-  medPrnList.innerHTML = '<div class="empty-message">No hay medicaciones a demanda activas.</div>';
-  medHistoryList.innerHTML = '<div class="empty-message">Aun no hay eventos de medicacion.</div>';
-  medHistoryMedication.innerHTML = '<option value="">Todas</option>';
+  medActiveBadge.textContent = "0 activos";
+  medHistoryBadge.textContent = "0 periodos";
+  medActiveList.innerHTML = '<div class="empty-message">No hay tratamientos activos.</div>';
+  medHistoryList.innerHTML = '<div class="empty-message">Aun no hay tratamientos finalizados o suspendidos.</div>';
   tabStatusState = {
     ...tabStatusState,
-    medicationStatus: "none",
+    activeMedications: 0,
   };
   renderTabStatus();
 }
 
-function populateMedicationFilterOptions(medications) {
-  const currentValue = medHistoryMedication.value;
-  const options = [
-    '<option value="">Todas</option>',
-    ...medications.map((med) => `<option value="${med.id}">${escapeHtml(med.name)}</option>`),
-  ];
-  medHistoryMedication.innerHTML = options.join("");
-  medHistoryMedication.value = medications.some((med) => String(med.id) === String(currentValue))
-    ? currentValue
+function medicationStatusLabel(status) {
+  if (status === "finished") return "Finalizado";
+  if (status === "suspended") return "Suspendido";
+  return "Activo";
+}
+
+function isTreatmentActive(treatment, today = todayLocalDateString()) {
+  return treatment.status === "active" && (!treatment.end_date || treatment.end_date >= today);
+}
+
+function treatmentDuration(treatment) {
+  const end = treatment.end_date || todayLocalDateString();
+  const days = inclusiveDayDistance(treatment.start_date, end);
+  if (days <= 0) return "-";
+  return `${days} dia${days === 1 ? "" : "s"}`;
+}
+
+function treatmentCard(treatment, historical = false) {
+  const status = medicationStatusLabel(treatment.status);
+  const suspension = treatment.status === "suspended" && treatment.suspension_reason
+    ? `<div class="med-detail"><b>Motivo de suspension:</b> ${escapeHtml(treatment.suspension_reason)}</div>`
     : "";
+  const reason = treatment.reason
+    ? `<div class="med-detail"><b>Motivo:</b> ${escapeHtml(treatment.reason)}</div>`
+    : "";
+  const actions = historical
+    ? `<button class="ghost" type="button" data-med-action="edit" data-med-id="${treatment.id}">Editar</button>
+       <button class="secondary" type="button" data-med-action="reactivate" data-med-id="${treatment.id}">Reactivar</button>
+       <button class="danger" type="button" data-med-action="delete" data-med-id="${treatment.id}">Eliminar</button>`
+    : `<button class="ghost" type="button" data-med-action="edit" data-med-id="${treatment.id}">Editar</button>
+       <button class="secondary" type="button" data-med-action="finish" data-med-id="${treatment.id}">Finalizar</button>
+       <button class="secondary" type="button" data-med-action="suspend" data-med-id="${treatment.id}">Suspender</button>
+       <button class="danger" type="button" data-med-action="delete" data-med-id="${treatment.id}">Eliminar</button>`;
+
+  return `<article class="med-item">
+    <div class="med-item-main">
+      <div><div class="med-name">${escapeHtml(treatment.name)}</div>
+      ${treatment.active_ingredient ? `<div class="med-meta">${escapeHtml(treatment.active_ingredient)}</div>` : ""}</div>
+      <span class="med-status med-status-${treatment.status}">${status}</span>
+    </div>
+    <div class="med-summary-grid">
+      <div><b>Dosis</b><span>${escapeHtml(treatment.dose || "-")}</span></div>
+      <div><b>Frecuencia</b><span>${escapeHtml(treatment.frequency || "-")}</span></div>
+      <div><b>Inicio</b><span>${formatDateOnly(treatment.start_date)}</span></div>
+      ${historical ? `<div><b>Fin</b><span>${formatDateOnly(treatment.end_date)}</span></div><div><b>Duracion</b><span>${treatmentDuration(treatment)}</span></div>` : ""}
+    </div>
+    ${reason}${suspension}
+    <div class="med-actions">${actions}</div>
+  </article>`;
 }
 
-function timeWindowLabel(timeWindow) {
-  if (timeWindow === "morning") return "manana";
-  if (timeWindow === "afternoon") return "tarde";
-  if (timeWindow === "night") return "noche";
-  return "sin ventana";
-}
-
-function renderMedicationToday(plans, medicationsById, todayScheduledByPlan, latestExtraByPlan) {
-  const scheduledPlans = plans.filter((plan) => plan.type === "scheduled");
-  const prnPlans = plans.filter((plan) => plan.type === "prn");
-
-  const pendingScheduled = scheduledPlans.filter((plan) => !todayScheduledByPlan.has(plan.id)).length;
-  medTodayBadge.textContent = `${pendingScheduled} programadas pendientes`;
-
-  if (scheduledPlans.length === 0) {
-    medScheduledList.innerHTML = '<div class="empty-message">No hay medicaciones programadas activas.</div>';
-  } else {
-    medScheduledList.innerHTML = scheduledPlans
-      .map((plan) => {
-        const med = medicationsById.get(plan.medication_id);
-        const medName = med ? med.name : "Medicacion";
-        const takenToday = todayScheduledByPlan.get(plan.id) || null;
-        const scheduleMeta = `1 vez al dia (${timeWindowLabel(plan.time_window)})`;
-
-        return `
-          <article class="med-item">
-            <div class="med-item-main">
-              <div class="med-name">${escapeHtml(medName)}</div>
-              <div class="med-meta">${scheduleMeta}</div>
-            </div>
-            ${
-              takenToday
-                ? `<div class="med-taken">Tomada a las ${formatTime(takenToday.timestamp)}</div>`
-                : '<div class="med-meta">Pendiente de registrar hoy.</div>'
-            }
-            <div class="med-actions">
-              ${
-                takenToday
-                  ? ""
-                  : `<button
-                      type="button"
-                      class="primary"
-                      data-med-action="take-scheduled"
-                      data-plan-id="${plan.id}"
-                    >
-                      Marcar como tomada
-                    </button>`
-              }
-              ${
-                takenToday
-                  ? `<button
-                      type="button"
-                      class="ghost"
-                      data-med-action="undo-scheduled"
-                      data-intake-id="${takenToday.id}"
-                    >
-                      Deshacer
-                    </button>`
-                  : ""
-              }
-            </div>
-          </article>
-        `;
-      })
-      .join("");
-  }
-
-  if (prnPlans.length === 0) {
-    medPrnList.innerHTML = '<div class="empty-message">No hay medicaciones a demanda activas.</div>';
-  } else {
-    medPrnList.innerHTML = prnPlans
-      .map((plan) => {
-        const med = medicationsById.get(plan.medication_id);
-        const medName = med ? med.name : "Medicacion";
-        const lastExtra = latestExtraByPlan.get(plan.id);
-        const isRecentExtra =
-          lastExtra &&
-          Math.abs(Date.now() - new Date(lastExtra.timestamp).getTime()) / (60 * 60 * 1000) <=
-            EXTRA_SOFT_BRAKE_HOURS;
-        const warning = isRecentExtra
-          ? `<div class="med-warning">Ultima extra fue a las ${formatTime(lastExtra.timestamp)}</div>`
-          : "";
-
-        return `
-          <article class="med-item">
-            <div class="med-item-main">
-              <div class="med-name">${escapeHtml(medName)} extra</div>
-              <div class="med-meta">A demanda</div>
-            </div>
-            ${warning}
-            <div class="med-extra-fields">
-              <label class="field">
-                <span>Motivo</span>
-                <select data-prn-reason-for="${plan.id}">
-                  <option value="">Sin motivo</option>
-                  <option value="nervios">Nervios</option>
-                  <option value="tics">Tics</option>
-                  <option value="presentacion">Presentacion</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Notas</span>
-                <input type="text" data-prn-notes-for="${plan.id}" placeholder="Opcional" />
-              </label>
-              <button
-                type="button"
-                class="secondary"
-                data-med-action="take-extra"
-                data-plan-id="${plan.id}"
-              >
-                Registrar toma extra
-              </button>
-            </div>
-          </article>
-        `;
-      })
-      .join("");
-  }
-}
-
-function renderMedicationHistory(items, medicationsById) {
-  if (items.length === 0) {
-    medHistoryList.innerHTML = '<div class="empty-message">Aun no hay eventos de medicacion.</div>';
-    return;
-  }
-
-  const grouped = new Map();
-  for (const item of items) {
-    const day = isoToLocalDateString(item.timestamp);
-    if (!grouped.has(day)) grouped.set(day, []);
-    grouped.get(day).push(item);
-  }
-
-  const blocks = Array.from(grouped.entries())
-    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-    .map(([day, dayItems]) => {
-      const events = dayItems
-        .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))
-        .map((event) => {
-          const med = medicationsById.get(event.medication_id);
-          const medName = med ? med.name : "Medicacion";
-          const amount = Number(event.amount || 1);
-          const amountLabel = Number.isNaN(amount) ? "" : ` x${amount}`;
-          const reason = event.reason ? `, ${reasonLabel(event.reason)}` : "";
-          const notes = event.notes ? ` - ${escapeHtml(event.notes)}` : "";
-          return `<li>${escapeHtml(medName)}${amountLabel} ${formatTime(event.timestamp)} (${sourceLabel(
-            event.source
-          )}${reason})${notes}</li>`;
-        })
-        .join("");
-
-      return `
-        <article class="med-history-day">
-          <div class="med-history-day-title">${dayLabel(day)} (${day})</div>
-          <ul class="med-history-events">${events}</ul>
-        </article>
-      `;
-    })
-    .join("");
-
-  medHistoryList.innerHTML = blocks;
+function renderTreatments(treatments) {
+  const active = treatments.filter((item) => isTreatmentActive(item));
+  const historical = treatments
+    .filter((item) => !isTreatmentActive(item))
+    .sort((a, b) => b.start_date.localeCompare(a.start_date));
+  medActiveBadge.textContent = `${active.length} activo${active.length === 1 ? "" : "s"}`;
+  medHistoryBadge.textContent = `${historical.length} periodo${historical.length === 1 ? "" : "s"}`;
+  medActiveList.innerHTML = active.length
+    ? active.map((item) => treatmentCard(item, false)).join("")
+    : '<div class="empty-message">No hay tratamientos activos.</div>';
+  medHistoryList.innerHTML = historical.length
+    ? historical.map((item) => treatmentCard(item, true)).join("")
+    : '<div class="empty-message">Aun no hay tratamientos finalizados o suspendidos.</div>';
 }
 
 function resetReportsUI() {
@@ -1052,6 +916,13 @@ function resetReportsUI() {
   if (reportDetail) {
     reportDetail.innerHTML = '<div class="empty-message">Selecciona un informe para ver el detalle.</div>';
   }
+}
+
+function reportSummaryWithoutMedication(summary) {
+  return String(summary || "Sin resumen.")
+    .split("\n")
+    .filter((line) => !/^Medicacion:/i.test(line.trim()))
+    .join("\n");
 }
 
 function renderReportDetail(report) {
@@ -1066,10 +937,8 @@ function renderReportDetail(report) {
   const allTime = payload.all_time || {};
   const weekHabits = week.habits || {};
   const weekWeight = week.weight || {};
-  const weekMedication = week.medication || {};
   const allHabits = allTime.habits || {};
   const allWeight = allTime.weight || {};
-  const allMedication = allTime.medication || {};
 
   const weightWeekMean = weekWeight.mean_weight == null ? "-" : `${Number(weekWeight.mean_weight).toFixed(1)} kg`;
   const weightAllMean =
@@ -1080,7 +949,7 @@ function renderReportDetail(report) {
     allWeight.change_since_start == null ? "-" : `${Number(allWeight.change_since_start).toFixed(1)} kg`;
 
   reportDetail.innerHTML = `
-    <p class="report-summary">${escapeHtml(report.summary_text || "Sin resumen.")}</p>
+    <p class="report-summary">${escapeHtml(reportSummaryWithoutMedication(report.summary_text))}</p>
     <div class="report-blocks">
       <article class="report-block">
         <div class="report-block-title">Habitos</div>
@@ -1104,18 +973,6 @@ function renderReportDetail(report) {
           Cambio desde inicio: <b>${changeSinceStart}</b>
         </div>
       </article>
-      <article class="report-block">
-        <div class="report-block-title">Medicacion</div>
-        <div class="report-kv">
-          Adherencia semana: <b>${percentageLabel(weekMedication.adherence_rate)}</b> (${Number(
-            weekMedication.days_completed || 0
-          )}/${Number(weekMedication.days_total || 0)})<br>
-          Estado semana: <b>${escapeHtml(weekMedication.status_color || "-")}</b><br>
-          Extras semana: <b>${Number(weekMedication.extra_count_week || 0)}</b><br>
-          Adherencia historica: <b>${percentageLabel(allMedication.adherence_rate_all_time)}</b><br>
-          Extras historico: <b>${Number(allMedication.extra_count_all_time || 0)}</b>
-        </div>
-      </article>
     </div>
   `;
 }
@@ -1137,7 +994,7 @@ function renderReportsList() {
       return `
         <button type="button" class="report-item ${activeClass}" data-report-id="${report.id}">
           <div class="report-title">${escapeHtml(label)}</div>
-          <div class="report-preview">${escapeHtml(report.summary_text || "Sin resumen.")}</div>
+          <div class="report-preview">${escapeHtml(reportSummaryWithoutMedication(report.summary_text))}</div>
           <div class="report-meta">Generado: ${generated}</div>
         </button>
       `;
@@ -1292,347 +1149,171 @@ async function fetchHabitChecksAll() {
   });
 }
 
-function isActiveOnDate(item, date) {
-  if (item.active_from && item.active_from > date) return false;
-  if (item.active_to && item.active_to < date) return false;
-  return true;
-}
-
-async function fetchMedicationsCatalog() {
+async function fetchPrescribedMedications() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
 
   const params = createUserScopedParams({
-    select: "id,name,form,strength,notes,active_from,active_to",
-    order: "name.asc",
+    select: "id,name,active_ingredient,dose,frequency,start_date,end_date,status,reason,prescriber,instructions,notes,suspension_reason,created_at,updated_at",
+    order: "start_date.desc,id.desc",
   });
 
-  return apiFetch(`${SUPABASE_URL}/rest/v1/medications?${params.toString()}`, {
+  return apiFetch(`${SUPABASE_URL}/rest/v1/prescribed_medications?${params.toString()}`, {
     method: "GET",
     headers: {
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${currentSession.access_token}`,
     },
   });
-}
-
-async function fetchMedicationPlans() {
-  await refreshSessionIfNeeded();
-  if (!currentSession) return [];
-
-  const params = createUserScopedParams({
-    select: "id,medication_id,type,frequency,time_window,target_time,tolerance_minutes,active_from,active_to",
-    order: "id.asc",
-  });
-
-  return apiFetch(`${SUPABASE_URL}/rest/v1/medication_plans?${params.toString()}`, {
-    method: "GET",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${currentSession.access_token}`,
-    },
-  });
-}
-
-async function fetchMedicationIntakes() {
-  await refreshSessionIfNeeded();
-  if (!currentSession) return [];
-
-  const params = createUserScopedParams({
-    select: "id,medication_id,plan_id,timestamp,amount,source,reason,notes,created_at",
-    order: "timestamp.desc",
-  });
-
-  return apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes?${params.toString()}`, {
-    method: "GET",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${currentSession.access_token}`,
-    },
-  });
-}
-
-async function ensureMedicationSeed() {
-  await refreshSessionIfNeeded();
-  if (!currentSession) return;
-  if (medicationSeedUserId === getCurrentUserId()) return;
-
-  const today = todayLocalDateString();
-  let medications = await fetchMedicationsCatalog();
-
-  const requiredMedications = [
-    { name: "Lorazepam", active_from: today },
-    { name: "Atorvastatina", active_from: today },
-  ];
-
-  const existingByName = new Map(medications.map((med) => [med.name.toLowerCase(), med]));
-  const missingMedications = requiredMedications.filter((med) => !existingByName.has(med.name.toLowerCase()));
-
-  if (missingMedications.length > 0) {
-    const rows = missingMedications.map((med) =>
-      withCurrentUserId({
-        name: med.name,
-        active_from: med.active_from,
-      })
-    );
-    await apiFetch(`${SUPABASE_URL}/rest/v1/medications`, {
-      method: "POST",
-      headers: authHeaders({ Prefer: "return=representation" }),
-      body: JSON.stringify(rows),
-    });
-    medications = await fetchMedicationsCatalog();
-  }
-
-  const byName = new Map(medications.map((med) => [med.name.toLowerCase(), med]));
-  const plans = await fetchMedicationPlans();
-  const planExists = (medicationId, type, timeWindow) =>
-    plans.some(
-      (plan) =>
-        Number(plan.medication_id) === Number(medicationId) &&
-        plan.type === type &&
-        ((plan.time_window || null) === (timeWindow || null)) &&
-        (plan.active_to || null) === null
-    );
-
-  const lorazepam = byName.get("lorazepam");
-  const atorvastatina = byName.get("atorvastatina");
-  const rows = [];
-  const buildPlanRow = ({ medicationId, type, frequency = null, timeWindow = null }) => ({
-    user_id: getCurrentUserId(),
-    medication_id: medicationId,
-    type,
-    frequency,
-    time_window: timeWindow,
-    target_time: null,
-    tolerance_minutes: null,
-    active_from: today,
-    active_to: null,
-  });
-
-  if (lorazepam && !planExists(lorazepam.id, "scheduled", "morning")) {
-    rows.push(buildPlanRow({ medicationId: lorazepam.id, type: "scheduled", frequency: "daily", timeWindow: "morning" }));
-  }
-  if (lorazepam && !planExists(lorazepam.id, "prn", null)) {
-    rows.push(buildPlanRow({ medicationId: lorazepam.id, type: "prn" }));
-  }
-  if (atorvastatina && !planExists(atorvastatina.id, "scheduled", "morning")) {
-    rows.push(
-      buildPlanRow({ medicationId: atorvastatina.id, type: "scheduled", frequency: "daily", timeWindow: "morning" })
-    );
-  }
-
-  if (rows.length > 0) {
-    await apiFetch(`${SUPABASE_URL}/rest/v1/medication_plans`, {
-      method: "POST",
-      headers: authHeaders({ Prefer: "return=minimal" }),
-      body: JSON.stringify(rows),
-    });
-  }
-
-  medicationSeedUserId = getCurrentUserId();
-}
-
-function refreshMedicationHistory() {
-  const { intakes, medicationById } = medicationCache;
-  const medicationFilter = medHistoryMedication.value;
-  const sourceFilter = medHistorySource.value;
-  const fromDate = medHistoryFrom.value;
-  const toDate = medHistoryTo.value;
-
-  const filtered = intakes.filter((item) => {
-    const itemDate = isoToLocalDateString(item.timestamp);
-    if (medicationFilter && String(item.medication_id) !== String(medicationFilter)) return false;
-    if (sourceFilter && item.source !== sourceFilter) return false;
-    if (fromDate && itemDate < fromDate) return false;
-    if (toDate && itemDate > toDate) return false;
-    return true;
-  });
-
-  renderMedicationHistory(filtered, medicationById);
 }
 
 async function refreshMedications() {
-  await ensureMedicationSeed();
-
-  const [medicationsAll, plansAll, intakes] = await Promise.all([
-    fetchMedicationsCatalog(),
-    fetchMedicationPlans(),
-    fetchMedicationIntakes(),
-  ]);
-
-  const today = todayLocalDateString();
-  const medicationById = new Map(medicationsAll.map((med) => [Number(med.id), med]));
-  const activeMedications = medicationsAll.filter((med) => isActiveOnDate(med, today));
-  const activeMedicationIds = new Set(activeMedications.map((med) => Number(med.id)));
-  const activePlans = plansAll.filter(
-    (plan) => activeMedicationIds.has(Number(plan.medication_id)) && isActiveOnDate(plan, today)
-  );
-  const plansById = new Map(activePlans.map((plan) => [Number(plan.id), plan]));
-
-  const todayScheduledByPlan = new Map();
-  const latestExtraByPlan = new Map();
-
-  for (const intake of intakes) {
-    const planId = intake.plan_id == null ? null : Number(intake.plan_id);
-    if (planId == null || !plansById.has(planId)) continue;
-
-    if (intake.source === "scheduled" && isoToLocalDateString(intake.timestamp) === today) {
-      const prev = todayScheduledByPlan.get(planId);
-      if (!prev || prev.timestamp < intake.timestamp) todayScheduledByPlan.set(planId, intake);
-    }
-
-    if (intake.source === "extra") {
-      const prev = latestExtraByPlan.get(planId);
-      if (!prev || prev.timestamp < intake.timestamp) latestExtraByPlan.set(planId, intake);
-    }
-  }
-
-  const scheduledPlans = activePlans.filter((plan) => plan.type === "scheduled");
-  const scheduledDoneCount = scheduledPlans.filter((plan) => todayScheduledByPlan.has(Number(plan.id))).length;
-  const scheduledPendingCount = scheduledPlans.length - scheduledDoneCount;
-  const activePlanIds = new Set(activePlans.map((plan) => Number(plan.id)));
-  const intakesTodayCount = intakes.filter(
-    (intake) =>
-      intake.plan_id != null &&
-      activePlanIds.has(Number(intake.plan_id)) &&
-      isoToLocalDateString(intake.timestamp) === today
-  ).length;
-
-  let medicationStatus = "none";
-  if (scheduledPlans.length === 0) {
-    medicationStatus = intakesTodayCount > 0 ? "complete" : "none";
-  } else if (scheduledDoneCount === 0 && intakesTodayCount === 0) {
-    medicationStatus = "none";
-  } else if (scheduledPendingCount === 0) {
-    medicationStatus = "complete";
-  } else {
-    medicationStatus = "partial";
-  }
-
+  const treatments = await fetchPrescribedMedications();
+  const activeCount = treatments.filter((item) => isTreatmentActive(item)).length;
   medicationCache = {
-    medicationsAll,
-    medications: activeMedications,
-    plans: activePlans,
-    plansById,
-    medicationById,
-    latestScheduledTodayByPlan: todayScheduledByPlan,
-    latestExtraByPlan,
-    intakes,
+    treatments,
+    byId: new Map(treatments.map((item) => [Number(item.id), item])),
   };
-
-  populateMedicationFilterOptions(medicationsAll);
-  renderMedicationToday(activePlans, medicationById, todayScheduledByPlan, latestExtraByPlan);
-  refreshMedicationHistory();
+  renderTreatments(treatments);
   tabStatusState = {
     ...tabStatusState,
-    medicationStatus,
+    activeMedications: activeCount,
   };
   renderTabStatus();
 }
 
-function updateMedicationCreateVisibility() {
-  const isScheduled = medCreateType.value === "scheduled";
-  medCreateWindowField.classList.toggle("hidden", !isScheduled);
+function updateMedicationFormVisibility() {
+  medSuspensionReasonField.classList.toggle("hidden", medStatus.value !== "suspended");
 }
 
-async function findMedicationByName(name) {
-  const normalized = name.trim().toLowerCase();
-  if (!normalized) return null;
-  const cached = medicationCache.medicationsAll.find((med) => med.name.toLowerCase() === normalized);
-  if (cached) return cached;
-
-  const params = createUserScopedParams({
-    select: "id,name,active_from,active_to",
-    name: `ilike.${name}`,
-    limit: "5",
-  });
-  const matches = await apiFetch(`${SUPABASE_URL}/rest/v1/medications?${params.toString()}`, {
-    method: "GET",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${currentSession.access_token}`,
-    },
-  });
-  return matches.find((med) => med.name.toLowerCase() === normalized) || null;
+function showMedicationForm(treatment = null) {
+  medTreatmentForm.reset();
+  medEditId.value = treatment ? treatment.id : "";
+  medFormTitle.textContent = treatment ? "Editar tratamiento" : "Nuevo tratamiento";
+  medName.value = treatment?.name || "";
+  medActiveIngredient.value = treatment?.active_ingredient || "";
+  medDose.value = treatment?.dose || "";
+  medFrequency.value = treatment?.frequency || "";
+  medStartDate.value = treatment?.start_date || todayLocalDateString();
+  medEndDate.value = treatment?.end_date || "";
+  medStatus.value = treatment?.status || "active";
+  medReason.value = treatment?.reason || "";
+  medPrescriber.value = treatment?.prescriber || "";
+  medSuspensionReason.value = treatment?.suspension_reason || "";
+  medInstructions.value = treatment?.instructions || "";
+  medNotes.value = treatment?.notes || "";
+  medFormError.textContent = "";
+  updateMedicationFormVisibility();
+  medFormCard.classList.remove("hidden");
+  medFormCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-async function handleCreateMedicationPlan() {
-  const ok = await ensureAuthenticated("Inicia sesion para crear tratamientos.");
+function hideMedicationForm() {
+  medFormCard.classList.add("hidden");
+  medFormError.textContent = "";
+}
+
+function nullableInput(input) {
+  const value = input.value.trim();
+  return value || null;
+}
+
+function medicationFormPayload() {
+  const payload = {
+    name: medName.value.trim(),
+    active_ingredient: nullableInput(medActiveIngredient),
+    dose: nullableInput(medDose),
+    frequency: nullableInput(medFrequency),
+    start_date: medStartDate.value,
+    end_date: medEndDate.value || null,
+    status: medStatus.value,
+    reason: nullableInput(medReason),
+    prescriber: nullableInput(medPrescriber),
+    instructions: nullableInput(medInstructions),
+    notes: nullableInput(medNotes),
+    suspension_reason: medStatus.value === "suspended" ? nullableInput(medSuspensionReason) : null,
+  };
+  if (!payload.name) throw new Error("El nombre del medicamento es obligatorio.");
+  if (!payload.start_date) throw new Error("La fecha de inicio es obligatoria.");
+  if (payload.end_date && payload.end_date < payload.start_date) {
+    throw new Error("La fecha de fin no puede ser anterior a la fecha de inicio.");
+  }
+  if ((payload.status === "finished" || payload.status === "suspended") && !payload.end_date) {
+    throw new Error("Los tratamientos finalizados o suspendidos necesitan fecha de fin.");
+  }
+  return payload;
+}
+
+async function handleSaveMedication(event) {
+  event.preventDefault();
+  const ok = await ensureAuthenticated("Inicia sesion para guardar tratamientos.");
   if (!ok) return;
+  medFormSubmit.disabled = true;
+  try {
+    const payload = medicationFormPayload();
+    const id = medEditId.value;
+    const endpoint = id
+      ? `${SUPABASE_URL}/rest/v1/prescribed_medications?${createUserScopedParams({ id: `eq.${id}` }).toString()}`
+      : `${SUPABASE_URL}/rest/v1/prescribed_medications`;
+    await apiFetch(endpoint, {
+      method: id ? "PATCH" : "POST",
+      headers: authHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify(id ? payload : [withCurrentUserId(payload)]),
+    });
+    hideMedicationForm();
+    await refreshMedications();
+    setMessage(id ? "Tratamiento actualizado." : "Tratamiento creado.");
+  } catch (error) {
+    medFormError.textContent = error.message;
+  } finally {
+    medFormSubmit.disabled = false;
+  }
+}
 
-  const name = medCreateName.value.trim();
-  const type = medCreateType.value;
-  const windowValue = medCreateWindow.value;
-  const start = medCreateStart.value || todayLocalDateString();
-  const notes = medCreateNotes.value.trim();
+async function patchMedication(id, changes, successMessage) {
+  const params = createUserScopedParams({ id: `eq.${id}` });
+  await apiFetch(`${SUPABASE_URL}/rest/v1/prescribed_medications?${params.toString()}`, {
+    method: "PATCH",
+    headers: authHeaders({ Prefer: "return=minimal" }),
+    body: JSON.stringify(changes),
+  });
+  await refreshMedications();
+  setMessage(successMessage);
+}
 
-  if (!name) {
-    setMessage("Indica el nombre de la medicacion.");
+async function handleMedicationAction(action, id) {
+  const treatment = medicationCache.byId.get(Number(id));
+  if (!treatment) return;
+  if (action === "edit") return showMedicationForm(treatment);
+  const ok = await ensureAuthenticated("Inicia sesion para modificar tratamientos.");
+  if (!ok) return;
+  if (action === "delete") {
+    if (!confirm(`¿Eliminar el periodo de ${treatment.name}? Esta accion no se puede deshacer.`)) return;
+    const params = createUserScopedParams({ id: `eq.${id}` });
+    await apiFetch(`${SUPABASE_URL}/rest/v1/prescribed_medications?${params.toString()}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    await refreshMedications();
+    setMessage("Tratamiento eliminado.");
     return;
   }
-
-  medCreateSubmit.disabled = true;
-  try {
-    let medication = await findMedicationByName(name);
-    if (!medication) {
-      const inserted = await apiFetch(`${SUPABASE_URL}/rest/v1/medications`, {
-        method: "POST",
-        headers: authHeaders({ Prefer: "return=representation" }),
-        body: JSON.stringify([
-          withCurrentUserId({
-            name,
-            notes: notes || null,
-            active_from: start,
-            active_to: null,
-          }),
-        ]),
-      });
-      medication = inserted[0];
-    }
-
-    const existingPlans = medicationCache.plans.filter(
-      (plan) =>
-        Number(plan.medication_id) === Number(medication.id) &&
-        plan.type === type &&
-        (type === "prn" || plan.time_window === windowValue) &&
-        !plan.active_to
-    );
-    if (existingPlans.length > 0) {
-      setMessage("Ya existe un plan activo igual para esta medicacion.");
-      return;
-    }
-
-    await apiFetch(`${SUPABASE_URL}/rest/v1/medication_plans`, {
-      method: "POST",
-      headers: authHeaders({ Prefer: "return=minimal" }),
-      body: JSON.stringify([
-        withCurrentUserId({
-          medication_id: medication.id,
-          type,
-          frequency: type === "scheduled" ? "daily" : null,
-          time_window: type === "scheduled" ? windowValue : null,
-          target_time: null,
-          tolerance_minutes: null,
-          active_from: start,
-          active_to: null,
-        }),
-      ]),
-    });
-
-    medCreateName.value = "";
-    medCreateNotes.value = "";
-    medCreateType.value = "scheduled";
-    medCreateWindow.value = "morning";
-    medCreateStart.value = todayLocalDateString();
-    updateMedicationCreateVisibility();
-    if (medCreateDetails) medCreateDetails.open = false;
-
-    await refreshMedications();
-    setMessage("Tratamiento guardado.");
-  } catch (error) {
-    setMessage(`No se pudo guardar el tratamiento: ${error.message}`);
-  } finally {
-    medCreateSubmit.disabled = false;
+  if (action === "reactivate") {
+    await patchMedication(id, { status: "active", end_date: null, suspension_reason: null }, "Tratamiento reactivado.");
+    return;
+  }
+  const endDate = prompt("Fecha de fin (AAAA-MM-DD)", todayLocalDateString());
+  if (endDate == null) return;
+  if (!isValidDateOnly(endDate) || endDate < treatment.start_date) {
+    setMessage("Introduce una fecha valida que no sea anterior al inicio.");
+    return;
+  }
+  if (action === "finish") {
+    await patchMedication(id, { status: "finished", end_date: endDate, suspension_reason: null }, "Tratamiento finalizado.");
+  } else if (action === "suspend") {
+    const reason = prompt("Motivo de suspension (opcional)", treatment.suspension_reason || "");
+    if (reason == null) return;
+    await patchMedication(id, { status: "suspended", end_date: endDate, suspension_reason: reason.trim() || null }, "Tratamiento suspendido.");
   }
 }
 
@@ -1734,13 +1415,10 @@ async function refreshAllData() {
 
   if (medicationResult.status === "rejected") {
     const detail = medicationResult.reason.message || "error desconocido";
-    const missingTables =
-      detail.includes('relation "medications" does not exist') ||
-      detail.includes('relation "medication_plans" does not exist') ||
-      detail.includes('relation "medication_intakes" does not exist');
+    const missingTables = detail.includes('relation "prescribed_medications" does not exist');
 
     if (missingTables) {
-      setStatus("Falta crear tablas de medicaciones en Supabase. Ejecuta supabase_medications.sql.");
+      setStatus("Falta crear la tabla de tratamientos. Ejecuta supabase_prescribed_medications.sql en Supabase.");
       resetMedicationUI();
     } else {
       setStatus(`Error en medicaciones: ${detail}`);
@@ -2032,13 +1710,11 @@ async function handleExportAllData() {
   if (!ok) return;
 
   try {
-    const [weights, habits, habitChecks, medications, medicationPlans, medicationIntakes] = await Promise.all([
+    const [weights, habits, habitChecks, prescribedMedications] = await Promise.all([
       fetchWeightRecords(),
       fetchHabits(),
       fetchHabitChecksAll(),
-      fetchMedicationsCatalog(),
-      fetchMedicationPlans(),
-      fetchMedicationIntakes(),
+      fetchPrescribedMedications(),
     ]);
 
     const payload = {
@@ -2047,9 +1723,7 @@ async function handleExportAllData() {
       weights,
       habits,
       habit_checks: habitChecks,
-      medications,
-      medication_plans: medicationPlans,
-      medication_intakes: medicationIntakes,
+      prescribed_medications: prescribedMedications,
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -2262,103 +1936,6 @@ async function saveHabitStatusWithoutUpsert(row) {
   });
 }
 
-async function handleTakeScheduledMedication(planId) {
-  const ok = await ensureAuthenticated("Inicia sesion para registrar medicaciones.");
-  if (!ok) return;
-
-  const plan = medicationCache.plansById.get(Number(planId));
-  if (!plan) return;
-
-  const existing = medicationCache.latestScheduledTodayByPlan.get(Number(planId));
-  if (existing) {
-    const allowDuplicate = confirm(
-      `Ya registraste esta dosis hoy a las ${formatTime(
-        existing.timestamp
-      )}. ¿Registrar otra igualmente?`
-    );
-    if (!allowDuplicate) return;
-  }
-
-  await apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes`, {
-    method: "POST",
-    headers: authHeaders({ Prefer: "return=minimal" }),
-    body: JSON.stringify([
-      withCurrentUserId({
-        medication_id: plan.medication_id,
-        plan_id: plan.id,
-        timestamp: nowISO(),
-        amount: 1,
-        source: "scheduled",
-      }),
-    ]),
-  });
-
-  await refreshMedications();
-  setMessage("Toma programada registrada.");
-}
-
-async function handleUndoScheduledMedication(intakeId) {
-  const ok = await ensureAuthenticated("Inicia sesion para modificar medicaciones.");
-  if (!ok) return;
-
-  const params = createUserScopedParams({
-    id: `eq.${intakeId}`,
-  });
-
-  await apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes?${params.toString()}`, {
-    method: "DELETE",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${currentSession.access_token}`,
-    },
-  });
-
-  await refreshMedications();
-  setMessage("Toma programada deshecha.");
-}
-
-async function handleTakeExtraMedication(planId) {
-  const ok = await ensureAuthenticated("Inicia sesion para registrar medicaciones.");
-  if (!ok) return;
-
-  const numericPlanId = Number(planId);
-  const plan = medicationCache.plansById.get(numericPlanId);
-  if (!plan) return;
-
-  const reasonInput = medPrnList.querySelector(`[data-prn-reason-for="${numericPlanId}"]`);
-  const notesInput = medPrnList.querySelector(`[data-prn-notes-for="${numericPlanId}"]`);
-  const reasonValue = reasonInput ? reasonInput.value : "";
-  const notesValue = notesInput ? notesInput.value.trim() : "";
-
-  const previousExtra = medicationCache.latestExtraByPlan.get(numericPlanId);
-  let warning = "";
-  if (previousExtra) {
-    const diffHours = Math.abs(Date.now() - new Date(previousExtra.timestamp).getTime()) / (60 * 60 * 1000);
-    if (diffHours <= EXTRA_SOFT_BRAKE_HOURS) {
-      warning = ` Ultima extra: ${formatTime(previousExtra.timestamp)}.`;
-    }
-  }
-
-  await apiFetch(`${SUPABASE_URL}/rest/v1/medication_intakes`, {
-    method: "POST",
-    headers: authHeaders({ Prefer: "return=minimal" }),
-    body: JSON.stringify([
-      withCurrentUserId({
-        medication_id: plan.medication_id,
-        plan_id: plan.id,
-        timestamp: nowISO(),
-        amount: 1,
-        source: "extra",
-        reason: reasonValue || null,
-        notes: notesValue || null,
-      }),
-    ]),
-  });
-
-  await refreshMedications();
-  setMessage(`Toma extra registrada.${warning}`);
-}
-
 function bindEvents() {
   if (authForm) {
     authForm.addEventListener("submit", async (event) => {
@@ -2507,65 +2084,22 @@ function bindEvents() {
     }
   });
 
-  medScheduledList.addEventListener("click", async (event) => {
-    const takeBtn = event.target.closest('button[data-med-action="take-scheduled"]');
-    if (takeBtn) {
-      try {
-        await handleTakeScheduledMedication(takeBtn.dataset.planId);
-      } catch (error) {
-        setMessage(`No se pudo registrar la toma: ${error.message}`);
-      }
-      return;
-    }
+  medNewTreatment.addEventListener("click", () => showMedicationForm());
+  medFormCancel.addEventListener("click", hideMedicationForm);
+  medStatus.addEventListener("change", updateMedicationFormVisibility);
+  medTreatmentForm.addEventListener("submit", handleSaveMedication);
 
-    const undoBtn = event.target.closest('button[data-med-action="undo-scheduled"]');
-    if (undoBtn) {
-      try {
-        await handleUndoScheduledMedication(undoBtn.dataset.intakeId);
-      } catch (error) {
-        setMessage(`No se pudo deshacer: ${error.message}`);
-      }
-    }
-  });
-
-  medPrnList.addEventListener("click", async (event) => {
-    const extraBtn = event.target.closest('button[data-med-action="take-extra"]');
-    if (!extraBtn) return;
-
+  const medicationActionHandler = async (event) => {
+    const button = event.target.closest("button[data-med-action][data-med-id]");
+    if (!button) return;
     try {
-      await handleTakeExtraMedication(extraBtn.dataset.planId);
+      await handleMedicationAction(button.dataset.medAction, button.dataset.medId);
     } catch (error) {
-      setMessage(`No se pudo registrar la extra: ${error.message}`);
+      setMessage(`No se pudo modificar el tratamiento: ${error.message}`);
     }
-  });
-
-  medHistoryApply.addEventListener("click", () => {
-    refreshMedicationHistory();
-  });
-
-  medHistoryMedication.addEventListener("change", () => {
-    refreshMedicationHistory();
-  });
-
-  medHistorySource.addEventListener("change", () => {
-    refreshMedicationHistory();
-  });
-
-  medHistoryFrom.addEventListener("change", () => {
-    refreshMedicationHistory();
-  });
-
-  medHistoryTo.addEventListener("change", () => {
-    refreshMedicationHistory();
-  });
-
-  medCreateType.addEventListener("change", () => {
-    updateMedicationCreateVisibility();
-  });
-
-  medCreateSubmit.addEventListener("click", async () => {
-    await handleCreateMedicationPlan();
-  });
+  };
+  medActiveList.addEventListener("click", medicationActionHandler);
+  medHistoryList.addEventListener("click", medicationActionHandler);
 
   if (reportsList) {
     reportsList.addEventListener("click", (event) => {
@@ -2591,11 +2125,9 @@ function bindEvents() {
 async function init() {
   const today = todayLocalDateString();
   habitDateInput.value = today;
-  medHistoryFrom.value = addDaysToDateString(today, -14);
-  medHistoryTo.value = today;
-  medCreateStart.value = today;
+  medStartDate.value = today;
   setAuthMode("login");
-  updateMedicationCreateVisibility();
+  updateMedicationFormVisibility();
   updateNow();
   setInterval(updateNow, 1000);
   resetTabStatus();

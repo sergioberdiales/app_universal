@@ -1,4 +1,5 @@
--- Weekly reports (Habits + Weight + Medication)
+-- Weekly reports (Habits + Weight). Prescriptions are intentionally excluded:
+-- their existence must never be interpreted as daily adherence.
 -- Timezone baseline for report windows: Europe/Madrid
 
 create table if not exists public.weekly_reports (
@@ -100,20 +101,6 @@ declare
   v_weight_first numeric;
   v_weight_last numeric;
   v_weight_change_since_start numeric;
-
-  v_med_week_days_total integer := 7;
-  v_med_week_days_completed integer := 0;
-  v_med_week_rate numeric;
-  v_med_week_total_intakes integer := 0;
-  v_med_week_extra_count integer := 0;
-  v_med_week_status text := 'red';
-
-  v_med_all_days_total integer := 0;
-  v_med_all_days_completed integer := 0;
-  v_med_all_rate numeric;
-  v_med_all_extra_count integer := 0;
-  v_med_all_weeks_with_extra integer := 0;
-  v_med_all_extra_weekly_avg numeric;
 
   v_payload jsonb;
 begin
@@ -310,145 +297,6 @@ begin
     v_weight_change_since_start := null;
   end if;
 
-  -- Medication: weekly scheduled adherence + extras
-  with days as (
-    select generate_series(p_week_start::timestamp, p_week_end::timestamp, interval '1 day')::date as day
-  ), active_plans as (
-    select p.id, p.active_from, coalesce(p.active_to, date '9999-12-31') as active_to
-    from public.medication_plans p
-    where p.user_id = p_user_id
-      and p.type = 'scheduled'
-      and p.active_from <= p_week_end
-      and (p.active_to is null or p.active_to >= p_week_start)
-  ), scheduled_intakes as (
-    select distinct i.plan_id, (i.timestamp at time zone p_tz)::date as day
-    from public.medication_intakes i
-    where i.user_id = p_user_id
-      and i.source = 'scheduled'
-      and i.plan_id is not null
-      and ((i.timestamp at time zone p_tz)::date between p_week_start and p_week_end)
-  ), day_stats as (
-    select
-      d.day,
-      (
-        select count(*)
-        from active_plans ap
-        where d.day between ap.active_from and ap.active_to
-      )::int as planned_count,
-      (
-        select count(*)
-        from active_plans ap
-        join scheduled_intakes si on si.plan_id = ap.id and si.day = d.day
-        where d.day between ap.active_from and ap.active_to
-      )::int as taken_count
-    from days d
-  )
-  select
-    coalesce(sum(case when planned_count > 0 and taken_count >= planned_count then 1 else 0 end), 0)::int
-  into v_med_week_days_completed
-  from day_stats;
-
-  if v_med_week_days_total > 0 then
-    v_med_week_rate := v_med_week_days_completed::numeric / v_med_week_days_total;
-  else
-    v_med_week_rate := null;
-  end if;
-
-  select count(*)::int
-  into v_med_week_total_intakes
-  from public.medication_intakes i
-  where i.user_id = p_user_id
-    and ((i.timestamp at time zone p_tz)::date between p_week_start and p_week_end);
-
-  select count(*)::int
-  into v_med_week_extra_count
-  from public.medication_intakes i
-  where i.user_id = p_user_id
-    and i.source = 'extra'
-    and ((i.timestamp at time zone p_tz)::date between p_week_start and p_week_end);
-
-  if v_med_week_total_intakes = 0 then
-    v_med_week_status := 'red';
-  elsif coalesce(v_med_week_rate, 0) = 1 then
-    v_med_week_status := 'green';
-  else
-    v_med_week_status := 'orange';
-  end if;
-
-  -- Medication: all-time scheduled adherence + extras (up to week_end)
-  with first_active as (
-    select min(p.active_from) as first_day
-    from public.medication_plans p
-    where p.user_id = p_user_id
-      and p.type = 'scheduled'
-      and p.active_from <= p_week_end
-  ), days as (
-    select generate_series(first_day::timestamp, p_week_end::timestamp, interval '1 day')::date as day
-    from first_active
-    where first_day is not null
-  ), active_plans as (
-    select p.id, p.active_from, coalesce(p.active_to, date '9999-12-31') as active_to
-    from public.medication_plans p
-    where p.user_id = p_user_id
-      and p.type = 'scheduled'
-      and p.active_from <= p_week_end
-  ), scheduled_intakes as (
-    select distinct i.plan_id, (i.timestamp at time zone p_tz)::date as day
-    from public.medication_intakes i
-    where i.user_id = p_user_id
-      and i.source = 'scheduled'
-      and i.plan_id is not null
-      and ((i.timestamp at time zone p_tz)::date <= p_week_end)
-  ), day_stats as (
-    select
-      d.day,
-      (
-        select count(*)
-        from active_plans ap
-        where d.day between ap.active_from and ap.active_to
-      )::int as planned_count,
-      (
-        select count(*)
-        from active_plans ap
-        join scheduled_intakes si on si.plan_id = ap.id and si.day = d.day
-        where d.day between ap.active_from and ap.active_to
-      )::int as taken_count
-    from days d
-  )
-  select
-    coalesce(count(*), 0)::int,
-    coalesce(sum(case when planned_count > 0 and taken_count >= planned_count then 1 else 0 end), 0)::int
-  into
-    v_med_all_days_total,
-    v_med_all_days_completed
-  from day_stats;
-
-  if v_med_all_days_total > 0 then
-    v_med_all_rate := v_med_all_days_completed::numeric / v_med_all_days_total;
-  else
-    v_med_all_rate := null;
-  end if;
-
-  select count(*)::int
-  into v_med_all_extra_count
-  from public.medication_intakes i
-  where i.user_id = p_user_id
-    and i.source = 'extra'
-    and ((i.timestamp at time zone p_tz)::date <= p_week_end);
-
-  select count(distinct date_trunc('week', i.timestamp at time zone p_tz)::date)::int
-  into v_med_all_weeks_with_extra
-  from public.medication_intakes i
-  where i.user_id = p_user_id
-    and i.source = 'extra'
-    and ((i.timestamp at time zone p_tz)::date <= p_week_end);
-
-  if coalesce(v_med_all_weeks_with_extra, 0) > 0 then
-    v_med_all_extra_weekly_avg := v_med_all_extra_count::numeric / v_med_all_weeks_with_extra;
-  else
-    v_med_all_extra_weekly_avg := null;
-  end if;
-
   v_payload := jsonb_build_object(
     'meta', jsonb_build_object(
       'timezone', p_tz,
@@ -475,13 +323,6 @@ begin
         'max_weight', v_weight_week_max,
         'week_change_mean', v_weight_week_change_mean,
         'has_data', v_weight_week_count > 0
-      ),
-      'medication', jsonb_build_object(
-        'days_completed', v_med_week_days_completed,
-        'days_total', v_med_week_days_total,
-        'adherence_rate', v_med_week_rate,
-        'status_color', v_med_week_status,
-        'extra_count_week', v_med_week_extra_count
       )
     ),
     'all_time', jsonb_build_object(
@@ -496,13 +337,6 @@ begin
         'change_since_start', v_weight_change_since_start,
         'first_weight', v_weight_first,
         'last_weight', v_weight_last
-      ),
-      'medication', jsonb_build_object(
-        'adherence_rate_all_time', v_med_all_rate,
-        'days_completed_all_time', v_med_all_days_completed,
-        'days_total_all_time', v_med_all_days_total,
-        'extra_count_all_time', v_med_all_extra_count,
-        'extra_weekly_average', v_med_all_extra_weekly_avg
       )
     )
   );
@@ -529,14 +363,8 @@ declare
   v_weight_mean numeric := (p_payload #>> '{week,weight,mean_weight}')::numeric;
   v_weight_delta numeric := (p_payload #>> '{week,weight,week_change_mean}')::numeric;
 
-  v_med_rate numeric := (p_payload #>> '{week,medication,adherence_rate}')::numeric;
-  v_med_done int := coalesce((p_payload #>> '{week,medication,days_completed}')::int, 0);
-  v_med_total int := coalesce((p_payload #>> '{week,medication,days_total}')::int, 0);
-  v_med_extra int := coalesce((p_payload #>> '{week,medication,extra_count_week}')::int, 0);
-
   v_line_habits text;
   v_line_weight text;
-  v_line_med text;
   v_delta_label text;
 begin
   if v_habits_delta is null then
@@ -573,15 +401,7 @@ begin
     );
   end if;
 
-  v_line_med := format(
-    'Medicacion: adherencia %s (%s/%s). Extras: %s.',
-    coalesce(format('%s%%', round(v_med_rate * 100)), 'sin datos'),
-    v_med_done,
-    v_med_total,
-    v_med_extra
-  );
-
-  return v_line_habits || E'\n' || v_line_weight || E'\n' || v_line_med;
+  return v_line_habits || E'\n' || v_line_weight;
 end;
 $$;
 
@@ -716,8 +536,6 @@ begin
       select w.user_id from public.weights w
       union
       select h.user_id from public.habits h
-      union
-      select m.user_id from public.medications m
       union
       select wr.user_id from public.weekly_reports wr
     ) u

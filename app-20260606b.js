@@ -1,4 +1,4 @@
-// Build 2026-07-23: optional health context for habits and treatment history.
+// Build 2026-07-24: health event details and clinical evolution history.
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
@@ -79,11 +79,33 @@ const healthEventStart = document.getElementById("healthEventStart");
 const healthEventEnd = document.getElementById("healthEventEnd");
 const healthEventStatus = document.getElementById("healthEventStatus");
 const healthEventSeverity = document.getElementById("healthEventSeverity");
+const healthEventBodyArea = document.getElementById("healthEventBodyArea");
 const healthEventDescription = document.getElementById("healthEventDescription");
 const healthEventHabitChoices = document.getElementById("healthEventHabitChoices");
 const healthEventFormError = document.getElementById("healthEventFormError");
 const healthEventSubmit = document.getElementById("healthEventSubmit");
 const healthEventCancel = document.getElementById("healthEventCancel");
+const healthEventDetailModal = document.getElementById("healthEventDetailModal");
+const healthEventDetailTitle = document.getElementById("healthEventDetailTitle");
+const healthEventDetailClose = document.getElementById("healthEventDetailClose");
+const healthEventDetailContent = document.getElementById("healthEventDetailContent");
+const healthUpdateModal = document.getElementById("healthUpdateModal");
+const healthUpdateTitle = document.getElementById("healthUpdateTitle");
+const healthUpdateClose = document.getElementById("healthUpdateClose");
+const healthUpdateForm = document.getElementById("healthUpdateForm");
+const healthUpdateEventId = document.getElementById("healthUpdateEventId");
+const healthUpdateEditId = document.getElementById("healthUpdateEditId");
+const healthUpdateClinicalDate = document.getElementById("healthUpdateClinicalDate");
+const healthUpdateClinicalDateLabel = document.getElementById("healthUpdateClinicalDateLabel");
+const healthUpdateNote = document.getElementById("healthUpdateNote");
+const healthUpdateStatus = document.getElementById("healthUpdateStatus");
+const healthUpdateSeverity = document.getElementById("healthUpdateSeverity");
+const healthUpdateActions = document.getElementById("healthUpdateActions");
+const healthUpdateSyncStatus = document.getElementById("healthUpdateSyncStatus");
+const healthUpdateSyncField = document.getElementById("healthUpdateSyncField");
+const healthUpdateSyncHint = document.getElementById("healthUpdateSyncHint");
+const healthUpdateError = document.getElementById("healthUpdateError");
+const healthUpdateSubmit = document.getElementById("healthUpdateSubmit");
 
 const habitDetailModal = document.getElementById("habitDetailModal");
 const habitDetailTitle = document.getElementById("habitDetailTitle");
@@ -151,7 +173,8 @@ let medicationCache = {
   treatments: [],
   byId: new Map(),
 };
-let healthCache = { events: [], eventById: new Map(), affectedHabitIdsByEvent: new Map(), habits: [] };
+let healthCache = { events: [], eventById: new Map(), updatesByEvent: new Map(), affectedHabitIdsByEvent: new Map(), habits: [] };
+let selectedHealthEventId = null;
 let habitDayCache = { habits: [], checksByHabit: new Map(), date: "", dailyNote: null };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -1105,7 +1128,7 @@ function healthTypeLabel(value) {
 }
 
 function healthStatusLabel(value) {
-  return ({ active: "Activo", improving: "Mejorando", resolved: "Resuelto" })[value] || value;
+  return ({ active: "Activo", improving: "Mejorando", worsening: "Empeorando", resolved: "Resuelto" })[value] || value;
 }
 
 function healthSeverityLabel(value) {
@@ -1113,7 +1136,8 @@ function healthSeverityLabel(value) {
 }
 
 function resetHealthUI() {
-  healthCache = { events: [], eventById: new Map(), affectedHabitIdsByEvent: new Map(), habits: [] };
+  healthCache = { events: [], eventById: new Map(), updatesByEvent: new Map(), affectedHabitIdsByEvent: new Map(), habits: [] };
+  selectedHealthEventId = null;
   healthActiveBadge.textContent = "0 activos";
   healthHistoryBadge.textContent = "0 eventos";
   healthActiveList.innerHTML = '<div class="empty-message">No hay eventos activos.</div>';
@@ -1124,16 +1148,51 @@ function healthEventCard(event, resolved) {
   const severity = event.severity ? `<span>${healthSeverityLabel(event.severity)}</span>` : "";
   const habits = healthCache.affectedHabitIdsByEvent.get(Number(event.id)) || [];
   const habitNames = habits.map((id) => healthCache.habits.find((habit) => Number(habit.id) === Number(id))?.name).filter(Boolean);
+  const updates = healthCache.updatesByEvent.get(Number(event.id)) || [];
   const actions = resolved
-    ? `<button class="secondary" data-health-action="reopen" data-health-id="${event.id}" type="button">Reabrir</button>`
-    : `<button class="secondary" data-health-action="improve" data-health-id="${event.id}" type="button">Mejorando</button><button class="secondary" data-health-action="resolve" data-health-id="${event.id}" type="button">Resolver</button>`;
+    ? `<button class="secondary" data-health-action="reopen" data-health-id="${event.id}" type="button">Reactivar</button>`
+    : `<button class="secondary" data-health-action="resolve" data-health-id="${event.id}" type="button">Resolver</button>`;
   const duration = resolved && !event.end_date ? "-" : treatmentDuration({ start_date: event.start_date, end_date: event.end_date });
   return `<article class="health-event-item">
     <div class="med-item-main"><div><div class="med-name">${escapeHtml(event.title)}</div><div class="med-meta">${healthTypeLabel(event.type)}</div></div><span class="health-status health-status-${event.status}">${healthStatusLabel(event.status)}</span></div>
     <div class="med-summary-grid"><div><b>Inicio</b><span>${formatDateOnly(event.start_date)}</span></div>${resolved ? `<div><b>Fin</b><span>${formatDateOnly(event.end_date)}</span></div>` : ""}<div><b>Duracion</b><span>${duration}</span></div>${severity ? `<div><b>Intensidad</b>${severity}</div>` : ""}</div>
+    ${event.body_area ? `<div class="med-detail"><b>Zona corporal:</b> ${escapeHtml(event.body_area)}</div>` : ""}
     ${habitNames.length ? `<div class="med-detail"><b>Habitos afectados:</b> ${escapeHtml(habitNames.join(", "))}</div>` : ""}
-    <div class="med-actions"><button class="ghost" data-health-action="edit" data-health-id="${event.id}" type="button">Editar</button>${actions}<button class="danger" data-health-action="delete" data-health-id="${event.id}" type="button">Eliminar</button></div>
+    <div class="health-update-count">${updates.length} actualizacion${updates.length === 1 ? "" : "es"}</div>
+    <div class="med-actions"><button class="primary" data-health-action="detail" data-health-id="${event.id}" type="button">Ver detalle</button><button class="ghost" data-health-action="edit" data-health-id="${event.id}" type="button">Editar datos principales</button>${actions}<button class="danger" data-health-action="delete" data-health-id="${event.id}" type="button">Eliminar</button></div>
   </article>`;
+}
+
+function healthUpdateTimelineItem(update) {
+  const badges = [
+    update.status ? `<span class="health-status health-status-${update.status}">${healthStatusLabel(update.status)}</span>` : "",
+    update.severity ? `<span class="chip">${healthSeverityLabel(update.severity)}</span>` : "",
+  ].filter(Boolean).join("");
+  return `<article class="health-timeline-item">
+    <div class="health-timeline-marker" aria-hidden="true"></div>
+    <div class="health-timeline-content">
+      <div class="health-update-heading"><div><b>${formatDateOnly(update.clinical_date)}</b><span class="health-created-at">Registrado ${formatDate(update.created_at)}</span></div><div class="health-update-badges">${badges}</div></div>
+      <p>${escapeHtml(update.note).replaceAll("\n", "<br>")}</p>
+      ${update.actions_taken ? `<div class="med-detail"><b>Acciones realizadas:</b> ${escapeHtml(update.actions_taken).replaceAll("\n", "<br>")}</div>` : ""}
+      ${update.sync_event_status && update.status ? '<p class="health-sync-note">Este registro sincronizo el estado actual del evento al guardarse.</p>' : ""}
+      <div class="med-actions"><button class="ghost" data-health-update-action="edit" data-update-id="${update.id}" type="button">Editar</button><button class="danger" data-health-update-action="delete" data-update-id="${update.id}" type="button">Eliminar</button></div>
+    </div>
+  </article>`;
+}
+
+function renderHealthEventDetail() {
+  if (!selectedHealthEventId) return;
+  const event = healthCache.eventById.get(Number(selectedHealthEventId));
+  if (!event) return closeModal(healthEventDetailModal);
+  const updates = healthCache.updatesByEvent.get(Number(event.id)) || [];
+  healthEventDetailTitle.textContent = event.title;
+  healthEventDetailContent.innerHTML = `<section class="health-main-info">
+    <div class="health-detail-header"><div><span class="med-meta">${healthTypeLabel(event.type)}</span><h3>Informacion principal</h3></div><span class="health-status health-status-${event.status}">${healthStatusLabel(event.status)}</span></div>
+    <div class="med-summary-grid"><div><b>Inicio</b><span>${formatDateOnly(event.start_date)}</span></div><div><b>Resolucion</b><span>${formatDateOnly(event.end_date)}</span></div>${event.body_area ? `<div><b>Zona corporal</b><span>${escapeHtml(event.body_area)}</span></div>` : ""}${event.severity ? `<div><b>Intensidad inicial</b><span>${healthSeverityLabel(event.severity)}</span></div>` : ""}</div>
+    ${event.description ? `<div class="med-detail"><b>Descripcion inicial:</b><br>${escapeHtml(event.description).replaceAll("\n", "<br>")}</div>` : '<p class="hint">Sin descripcion inicial.</p>'}
+    <div class="med-actions"><button class="primary" data-health-detail-action="add-update" data-health-id="${event.id}" type="button">Añadir actualización</button>${event.status !== "resolved" ? `<button class="secondary" data-health-detail-action="resolve" data-health-id="${event.id}" type="button">Resolver evento</button>` : `<button class="secondary" data-health-detail-action="reopen" data-health-id="${event.id}" type="button">Reactivar evento</button>`}</div>
+  </section>
+  <section><div class="table-header"><h3>Evolucion</h3><span class="chip">${updates.length}</span></div><div class="health-timeline">${updates.length ? updates.map(healthUpdateTimelineItem).join("") : '<div class="empty-message">Todavia no hay actualizaciones clínicas.</div>'}</div></section>`;
 }
 
 function renderHealthEvents() {
@@ -1155,8 +1214,15 @@ function renderHealthHabitChoices(selectedIds = []) {
 async function fetchHealthEvents() {
   await refreshSessionIfNeeded();
   if (!currentSession) return [];
-  const params = createUserScopedParams({ select: "id,title,type,start_date,end_date,status,severity,description,created_at,updated_at", order: "start_date.desc,id.desc" });
+  const params = createUserScopedParams({ select: "id,title,type,start_date,end_date,status,severity,body_area,description,created_at,updated_at", order: "start_date.desc,id.desc" });
   return apiFetch(`${SUPABASE_URL}/rest/v1/health_events?${params.toString()}`, { method: "GET", headers: authHeaders() });
+}
+
+async function fetchHealthEventUpdates() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+  const params = createUserScopedParams({ select: "id,health_event_id,clinical_date,note,status,severity,actions_taken,sync_event_status,created_at,updated_at", order: "clinical_date.desc,created_at.desc,id.desc" });
+  return apiFetch(`${SUPABASE_URL}/rest/v1/health_event_updates?${params.toString()}`, { method: "GET", headers: authHeaders() });
 }
 
 async function fetchHealthEventHabits() {
@@ -1167,15 +1233,22 @@ async function fetchHealthEventHabits() {
 }
 
 async function refreshHealthEvents() {
-  const [events, links, habits] = await Promise.all([fetchHealthEvents(), fetchHealthEventHabits(), fetchHabits()]);
+  const [events, updates, links, habits] = await Promise.all([fetchHealthEvents(), fetchHealthEventUpdates(), fetchHealthEventHabits(), fetchHabits()]);
+  const updatesByEvent = new Map();
+  for (const update of updates) {
+    const eventId = Number(update.health_event_id);
+    if (!updatesByEvent.has(eventId)) updatesByEvent.set(eventId, []);
+    updatesByEvent.get(eventId).push(update);
+  }
   const affectedHabitIdsByEvent = new Map();
   for (const link of links) {
     const eventId = Number(link.health_event_id);
     if (!affectedHabitIdsByEvent.has(eventId)) affectedHabitIdsByEvent.set(eventId, []);
     affectedHabitIdsByEvent.get(eventId).push(Number(link.habit_id));
   }
-  healthCache = { events, eventById: new Map(events.map((event) => [Number(event.id), event])), affectedHabitIdsByEvent, habits };
+  healthCache = { events, eventById: new Map(events.map((event) => [Number(event.id), event])), updatesByEvent, affectedHabitIdsByEvent, habits };
   renderHealthEvents();
+  renderHealthEventDetail();
 }
 
 function showHealthEventForm(event = null) {
@@ -1188,6 +1261,7 @@ function showHealthEventForm(event = null) {
   healthEventEnd.value = event?.end_date || "";
   healthEventStatus.value = event?.status || "active";
   healthEventSeverity.value = event?.severity || "";
+  healthEventBodyArea.value = event?.body_area || "";
   healthEventDescription.value = event?.description || "";
   healthEventFormError.textContent = "";
   renderHealthHabitChoices(event ? healthCache.affectedHabitIdsByEvent.get(Number(event.id)) || [] : []);
@@ -1213,7 +1287,7 @@ async function handleSaveHealthEvent(event) {
   event.preventDefault();
   const ok = await ensureAuthenticated("Inicia sesion para guardar eventos de salud.");
   if (!ok) return;
-  const payload = { title: healthEventTitle.value.trim(), type: healthEventType.value, start_date: healthEventStart.value, end_date: healthEventEnd.value || null, status: healthEventStatus.value, severity: healthEventSeverity.value || null, description: nullableInput(healthEventDescription) };
+  const payload = { title: healthEventTitle.value.trim(), type: healthEventType.value, start_date: healthEventStart.value, end_date: healthEventEnd.value || null, status: healthEventStatus.value, severity: healthEventSeverity.value || null, body_area: nullableInput(healthEventBodyArea), description: nullableInput(healthEventDescription) };
   if (!payload.title) return void (healthEventFormError.textContent = "El titulo es obligatorio.");
   if (!payload.start_date) return void (healthEventFormError.textContent = "La fecha de inicio es obligatoria.");
   if (payload.end_date && payload.end_date < payload.start_date) return void (healthEventFormError.textContent = "La fecha de fin no puede ser anterior al inicio.");
@@ -1245,18 +1319,129 @@ async function patchHealthEvent(id, changes, message) {
   setMessage(message);
 }
 
+function findHealthUpdate(updateId) {
+  for (const updates of healthCache.updatesByEvent.values()) {
+    const update = updates.find((item) => Number(item.id) === Number(updateId));
+    if (update) return update;
+  }
+  return null;
+}
+
+function updateHealthSyncVisibility() {
+  const hasStatus = !!healthUpdateStatus.value;
+  healthUpdateSyncField.classList.toggle("hidden", !hasStatus);
+  healthUpdateSyncHint.classList.toggle("hidden", !hasStatus);
+  if (!hasStatus) healthUpdateSyncStatus.checked = false;
+}
+
+function showHealthEventDetail(eventId) {
+  selectedHealthEventId = Number(eventId);
+  renderHealthEventDetail();
+  openModal(healthEventDetailModal);
+}
+
+function showHealthUpdateForm(eventId, update = null, mode = "normal") {
+  const healthEvent = healthCache.eventById.get(Number(eventId));
+  if (!healthEvent) return;
+  selectedHealthEventId = Number(healthEvent.id);
+  healthUpdateForm.reset();
+  healthUpdateEventId.value = healthEvent.id;
+  healthUpdateEditId.value = update?.id || "";
+  healthUpdateClinicalDate.value = update?.clinical_date || todayLocalDateString();
+  healthUpdateNote.value = update?.note || "";
+  healthUpdateStatus.value = update?.status || "";
+  healthUpdateSeverity.value = update?.severity || "";
+  healthUpdateActions.value = update?.actions_taken || "";
+  healthUpdateSyncStatus.checked = !!update?.sync_event_status;
+  healthUpdateStatus.disabled = false;
+  healthUpdateSyncStatus.disabled = false;
+  healthUpdateClinicalDateLabel.textContent = "Fecha clínica *";
+  healthUpdateTitle.textContent = update ? "Editar actualización" : "Añadir actualización";
+  healthUpdateSubmit.textContent = "Guardar actualización";
+  if (mode === "resolve") {
+    healthUpdateTitle.textContent = "Resolver evento";
+    healthUpdateSubmit.textContent = "Guardar nota y resolver";
+    healthUpdateClinicalDateLabel.textContent = "Fecha de resolución *";
+    healthUpdateStatus.value = "resolved";
+    healthUpdateSyncStatus.checked = true;
+    healthUpdateStatus.disabled = true;
+    healthUpdateSyncStatus.disabled = true;
+  } else if (mode === "reopen") {
+    healthUpdateTitle.textContent = "Reactivar evento";
+    healthUpdateSubmit.textContent = "Guardar nota y reactivar";
+    healthUpdateClinicalDateLabel.textContent = "Fecha de reactivación *";
+    healthUpdateStatus.value = "active";
+    healthUpdateSyncStatus.checked = true;
+    healthUpdateStatus.disabled = true;
+    healthUpdateSyncStatus.disabled = true;
+  }
+  healthUpdateError.textContent = "";
+  updateHealthSyncVisibility();
+  closeModal(healthEventDetailModal);
+  openModal(healthUpdateModal);
+  healthUpdateNote.focus();
+}
+
+async function handleSaveHealthUpdate(event) {
+  event.preventDefault();
+  const ok = await ensureAuthenticated("Inicia sesion para guardar actualizaciones clínicas.");
+  if (!ok) return;
+  const healthEvent = healthCache.eventById.get(Number(healthUpdateEventId.value));
+  if (!healthEvent) return void (healthUpdateError.textContent = "El evento ya no esta disponible.");
+  const payload = {
+    health_event_id: Number(healthEvent.id),
+    clinical_date: healthUpdateClinicalDate.value,
+    note: healthUpdateNote.value.trim(),
+    status: healthUpdateStatus.value || null,
+    severity: healthUpdateSeverity.value || null,
+    actions_taken: nullableInput(healthUpdateActions),
+    sync_event_status: !!healthUpdateStatus.value && healthUpdateSyncStatus.checked,
+  };
+  if (!isValidDateOnly(payload.clinical_date)) return void (healthUpdateError.textContent = "La fecha clínica no es valida.");
+  if (!payload.note) return void (healthUpdateError.textContent = "La nota clínica es obligatoria.");
+  if (payload.sync_event_status && payload.status === "resolved" && payload.clinical_date < healthEvent.start_date) {
+    return void (healthUpdateError.textContent = "La fecha de resolución no puede ser anterior al inicio del evento.");
+  }
+  healthUpdateSubmit.disabled = true;
+  try {
+    const updateId = healthUpdateEditId.value;
+    if (updateId) {
+      const params = createUserScopedParams({ id: `eq.${updateId}`, health_event_id: `eq.${healthEvent.id}` });
+      await apiFetch(`${SUPABASE_URL}/rest/v1/health_event_updates?${params.toString()}`, { method: "PATCH", headers: authHeaders({ Prefer: "return=minimal" }), body: JSON.stringify(payload) });
+    } else {
+      await apiFetch(`${SUPABASE_URL}/rest/v1/health_event_updates`, { method: "POST", headers: authHeaders({ Prefer: "return=minimal" }), body: JSON.stringify([withCurrentUserId(payload)]) });
+    }
+    closeModal(healthUpdateModal);
+    await refreshHealthEvents();
+    showHealthEventDetail(healthEvent.id);
+    setMessage(updateId ? "Actualización clínica modificada." : "Actualización clínica añadida.");
+  } catch (error) {
+    healthUpdateError.textContent = error.message;
+  } finally {
+    healthUpdateSubmit.disabled = false;
+  }
+}
+
+async function handleHealthUpdateAction(action, updateId) {
+  const update = findHealthUpdate(updateId);
+  if (!update) return;
+  if (action === "edit") return showHealthUpdateForm(update.health_event_id, update);
+  if (action === "delete") {
+    if (!confirm("¿Eliminar esta actualización clínica? El estado actual del evento no cambiara.")) return;
+    const params = createUserScopedParams({ id: `eq.${update.id}`, health_event_id: `eq.${update.health_event_id}` });
+    await apiFetch(`${SUPABASE_URL}/rest/v1/health_event_updates?${params.toString()}`, { method: "DELETE", headers: authHeaders() });
+    await refreshHealthEvents();
+    setMessage("Actualización clínica eliminada.");
+  }
+}
+
 async function handleHealthEventAction(action, id) {
   const event = healthCache.eventById.get(Number(id));
   if (!event) return;
+  if (action === "detail") return showHealthEventDetail(id);
   if (action === "edit") return showHealthEventForm(event);
-  if (action === "improve") return patchHealthEvent(id, { status: "improving" }, "Evento marcado como mejorando.");
-  if (action === "reopen") return patchHealthEvent(id, { status: "active", end_date: null }, "Evento reabierto.");
-  if (action === "resolve") {
-    const endDate = prompt("Fecha de resolucion (AAAA-MM-DD, opcional)", event.end_date || todayLocalDateString());
-    if (endDate == null) return;
-    if (endDate && (!isValidDateOnly(endDate) || endDate < event.start_date)) return void setMessage("La fecha de resolucion no es valida.");
-    return patchHealthEvent(id, { status: "resolved", end_date: endDate || null }, "Evento resuelto.");
-  }
+  if (action === "reopen") return showHealthUpdateForm(id, null, "reopen");
+  if (action === "resolve") return showHealthUpdateForm(id, null, "resolve");
   if (action === "delete") {
     if (!confirm(`¿Eliminar el evento "${event.title}"?`)) return;
     const params = createUserScopedParams({ id: `eq.${id}` });
@@ -1813,7 +1998,7 @@ async function refreshAllData() {
 
   if (healthResult.status === "rejected") {
     const detail = healthResult.reason.message || "error desconocido";
-    const missingTables = detail.includes('relation "health_events" does not exist') || detail.includes('relation "health_event_habits" does not exist') || detail.includes('relation "daily_notes" does not exist');
+    const missingTables = detail.includes('relation "health_events" does not exist') || detail.includes('relation "health_event_updates" does not exist') || detail.includes('relation "health_event_habits" does not exist') || detail.includes('relation "daily_notes" does not exist') || detail.includes("body_area");
     if (missingTables) {
       setStatus("Falta aplicar la migracion de salud. Ejecuta supabase_health_events.sql.");
       resetHealthUI();
@@ -2111,11 +2296,12 @@ async function handleExportAllData() {
   if (!ok) return;
 
   try {
-    const [weights, habits, habitChecks, healthEvents, healthEventHabits, dailyNotes, prescribedMedications] = await Promise.all([
+    const [weights, habits, habitChecks, healthEvents, healthEventUpdates, healthEventHabits, dailyNotes, prescribedMedications] = await Promise.all([
       fetchWeightRecords(),
       fetchHabits(),
       fetchHabitChecksAll(),
       fetchHealthEvents(),
+      fetchHealthEventUpdates(),
       fetchHealthEventHabits(),
       fetchDailyNotesAll(),
       fetchPrescribedMedications(),
@@ -2128,6 +2314,7 @@ async function handleExportAllData() {
       habits,
       habit_checks: habitChecks,
       health_events: healthEvents,
+      health_event_updates: healthEventUpdates,
       health_event_habits: healthEventHabits,
       daily_notes: dailyNotes,
       prescribed_medications: prescribedMedications,
@@ -2436,7 +2623,7 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeHeaderMenu();
-      for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal]) closeModal(modal);
+      for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal, healthEventDetailModal, healthUpdateModal]) closeModal(modal);
     }
   });
 
@@ -2514,6 +2701,27 @@ function bindEvents() {
   };
   healthActiveList.addEventListener("click", healthActionHandler);
   healthHistoryList.addEventListener("click", healthActionHandler);
+  healthEventDetailClose.addEventListener("click", () => closeModal(healthEventDetailModal));
+  healthUpdateClose.addEventListener("click", () => {
+    closeModal(healthUpdateModal);
+    if (selectedHealthEventId) showHealthEventDetail(selectedHealthEventId);
+  });
+  healthUpdateStatus.addEventListener("change", updateHealthSyncVisibility);
+  healthUpdateForm.addEventListener("submit", handleSaveHealthUpdate);
+  healthEventDetailContent.addEventListener("click", async (event) => {
+    const detailAction = event.target.closest("button[data-health-detail-action][data-health-id]");
+    if (detailAction) {
+      const action = detailAction.dataset.healthDetailAction;
+      const eventId = detailAction.dataset.healthId;
+      if (action === "add-update") return showHealthUpdateForm(eventId);
+      if (action === "resolve") return showHealthUpdateForm(eventId, null, "resolve");
+      if (action === "reopen") return showHealthUpdateForm(eventId, null, "reopen");
+    }
+    const updateAction = event.target.closest("button[data-health-update-action][data-update-id]");
+    if (!updateAction) return;
+    try { await handleHealthUpdateAction(updateAction.dataset.healthUpdateAction, updateAction.dataset.updateId); }
+    catch (error) { setMessage(`No se pudo modificar la actualización: ${error.message}`); }
+  });
 
   habitDetailClose.addEventListener("click", () => closeModal(habitDetailModal));
   habitDetailForm.addEventListener("submit", saveHabitDetails);
@@ -2524,7 +2732,7 @@ function bindEvents() {
   dailyNoteDelete.addEventListener("click", deleteDailyNote);
   openDayDetail.addEventListener("click", showDayDetail);
   dayDetailClose.addEventListener("click", () => closeModal(dayDetailModal));
-  for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal]) {
+  for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal, healthEventDetailModal, healthUpdateModal]) {
     modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(modal); });
   }
 

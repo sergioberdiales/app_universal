@@ -703,6 +703,7 @@ details[open] summary::before {
 
 .health-status-active { background: #fff0e9; color: #9a492c; }
 .health-status-improving { background: #fff8df; color: #826917; }
+.health-status-worsening { background: #ffe7e7; color: #9b2525; }
 .health-status-resolved { background: #e5f6f2; color: #20675f; }
 
 .health-event-form {
@@ -713,6 +714,62 @@ details[open] summary::before {
 
 .health-form-wide { grid-column: 1 / -1; }
 .health-form-actions { display: flex; justify-content: flex-end; }
+
+.health-update-count,
+.health-created-at,
+.health-sync-note {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.health-event-detail { display: grid; gap: 24px; margin-top: 16px; }
+.health-main-info { display: grid; gap: 14px; }
+.health-detail-header,
+.health-update-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.health-detail-header h3 { margin: 4px 0 0; }
+.health-timeline { display: grid; margin-top: 10px; }
+.health-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+}
+.health-timeline-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 14px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--stroke);
+}
+.health-timeline-marker {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  margin-top: 18px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--stroke);
+}
+.health-timeline-content {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: #fff;
+}
+.health-timeline-content p { margin: 10px 0; }
+.health-update-heading > div:first-child { display: grid; gap: 3px; }
+.health-update-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.health-sync-note { font-style: italic; }
 
 .habit-link-field {
   border: 1px solid var(--stroke);

@@ -17,7 +17,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=pwa-20260424a" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=pwa-20260424a" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=pwa-20260424a" />
-    <link rel="stylesheet" href="styles.css?v=health-context-20260723" />
+    <link rel="stylesheet" href="styles.css?v=health-history-20260724" />
   </head>
   <body>
     <div class="bg"></div>
@@ -274,11 +274,12 @@
                 <label class="field"><span>Titulo *</span><input id="healthEventTitle" type="text" required /></label>
                 <label class="field"><span>Tipo *</span><select id="healthEventType"><option value="injury">Lesion</option><option value="pain">Dolor</option><option value="illness">Enfermedad</option><option value="fatigue">Cansancio</option><option value="stress">Estres</option><option value="accident">Accidente</option><option value="medical_visit">Consulta medica</option><option value="emotional_event">Evento emocional</option><option value="other">Otro</option></select></label>
                 <label class="field"><span>Inicio *</span><input id="healthEventStart" type="date" required /></label>
-                <label class="field"><span>Fin</span><input id="healthEventEnd" type="date" /></label>
-                <label class="field"><span>Estado</span><select id="healthEventStatus"><option value="active">Activo</option><option value="improving">Mejorando</option><option value="resolved">Resuelto</option></select></label>
+                <label class="field"><span>Fin / resolucion</span><input id="healthEventEnd" type="date" disabled /><small>Se establece al resolver el evento.</small></label>
+                <label class="field"><span>Estado actual</span><select id="healthEventStatus" disabled><option value="active">Activo</option><option value="improving">Mejorando</option><option value="worsening">Empeorando</option><option value="resolved">Resuelto</option></select><small>Se cambia desde una actualización clínica.</small></label>
                 <label class="field"><span>Intensidad</span><select id="healthEventSeverity"><option value="">Sin indicar</option><option value="mild">Leve</option><option value="moderate">Moderada</option><option value="severe">Alta</option></select></label>
+                <label class="field"><span>Zona corporal</span><input id="healthEventBodyArea" type="text" placeholder="Ej: rodilla derecha" /></label>
                 <fieldset class="habit-link-field health-form-wide"><legend>Habitos afectados (opcional)</legend><div id="healthEventHabitChoices" class="habit-choice-list"></div></fieldset>
-                <label class="field health-form-wide"><span>Descripcion</span><textarea id="healthEventDescription" rows="4"></textarea></label>
+                <label class="field health-form-wide"><span>Descripcion inicial</span><textarea id="healthEventDescription" rows="4"></textarea></label>
                 <div id="healthEventFormError" class="form-error health-form-wide" role="alert"></div>
                 <div class="health-form-actions health-form-wide"><button id="healthEventSubmit" class="primary" type="submit">Guardar evento</button></div>
               </form>
@@ -392,7 +393,34 @@
       <section class="modal-card modal-card-wide"><div class="table-header"><h2 id="dayDetailTitle">Detalle del dia</h2><button id="dayDetailClose" class="ghost" type="button">Cerrar</button></div><div id="dayDetailContent" class="day-detail-content"></div></section>
     </div>
 
-    <script src="app-20260606b.js?v=health-context-20260723"></script>
+    <div id="healthEventDetailModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="healthEventDetailTitle">
+      <section class="modal-card modal-card-wide">
+        <div class="table-header"><h2 id="healthEventDetailTitle">Detalle del evento</h2><button id="healthEventDetailClose" class="ghost" type="button">Cerrar</button></div>
+        <div id="healthEventDetailContent" class="health-event-detail"></div>
+      </section>
+    </div>
+
+    <div id="healthUpdateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="healthUpdateTitle">
+      <section class="modal-card">
+        <div class="table-header"><h2 id="healthUpdateTitle">Añadir actualización</h2><button id="healthUpdateClose" class="ghost" type="button">Cerrar</button></div>
+        <form id="healthUpdateForm" class="detail-form" novalidate>
+          <input id="healthUpdateEventId" type="hidden" />
+          <input id="healthUpdateEditId" type="hidden" />
+          <label class="field"><span id="healthUpdateClinicalDateLabel">Fecha clínica *</span><input id="healthUpdateClinicalDate" type="date" required /></label>
+          <p class="hint">Puede ser una fecha pasada. La fecha de creación se guarda por separado automáticamente.</p>
+          <label class="field"><span>Nota clínica *</span><textarea id="healthUpdateNote" rows="5" required></textarea></label>
+          <label class="field"><span>Estado observado</span><select id="healthUpdateStatus"><option value="">Sin indicar</option><option value="active">Activo</option><option value="improving">Mejorando</option><option value="worsening">Empeorando</option><option value="resolved">Resuelto</option></select></label>
+          <label class="field"><span>Intensidad observada</span><select id="healthUpdateSeverity"><option value="">Sin indicar</option><option value="mild">Leve</option><option value="moderate">Moderada</option><option value="severe">Alta</option></select></label>
+          <label class="field"><span>Acciones realizadas</span><textarea id="healthUpdateActions" rows="3" placeholder="Tratamiento, reposo, consulta, ejercicios..."></textarea></label>
+          <label id="healthUpdateSyncField" class="secondary-status-action"><input id="healthUpdateSyncStatus" type="checkbox" /> Sincronizar este estado con el estado actual del evento</label>
+          <p id="healthUpdateSyncHint" class="hint">El evento es la fuente única del estado actual. Esta opción también ajusta la fecha de resolución cuando el estado es Resuelto.</p>
+          <div id="healthUpdateError" class="form-error" role="alert"></div>
+          <div class="modal-actions"><button id="healthUpdateSubmit" class="primary" type="submit">Guardar actualización</button></div>
+        </form>
+      </section>
+    </div>
+
+    <script src="app-20260606b.js?v=health-history-20260724"></script>
     <script src="pwa.js?v=pwa-20260424a"></script>
   </body>
 </html>

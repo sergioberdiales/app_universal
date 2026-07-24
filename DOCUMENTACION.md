@@ -77,11 +77,28 @@ permiten deducir fechas reales de prescripción.
 
 El contexto de salud utiliza:
 
-- `health_events`: eventos activos, en mejoria o resueltos.
+- `health_events`: información estable del evento (titulo, tipo, inicio,
+  resolución, descripción inicial, zona corporal y estado actual).
+- `health_event_updates`: evolución clínica del evento. Cada fila tiene su
+  propia fecha clínica (que puede ser anterior a la fecha de creación), nota,
+  estado e intensidad opcionales, acciones realizadas y marcas de auditoría.
 - `health_event_habits`: relacion opcional de un evento con varios habitos.
 - `habit_checks.comment`, `reason` y `health_event_id`: detalle opcional de un
   registro diario.
 - `daily_notes`: una nota general opcional por usuario y fecha.
+
+`health_events.status` es la única fuente de verdad del estado actual. El
+estado incluido en una actualización describe esa observación histórica. Si
+el usuario marca **Sincronizar**, el trigger
+`sync_health_event_status_from_update` actualiza de forma atómica el estado
+actual y, al resolver, usa la fecha clínica como fecha de resolución. Al
+reactivar se crea otra actualización y se limpia la fecha de resolución, sin
+eliminar ninguna entrada previa. Borrar una actualización histórica no
+reescribe el estado actual.
+
+La aplicación no admite adjuntos en actualizaciones: el proyecto no dispone
+actualmente de un bucket ni de políticas de Supabase Storage. Se evita guardar
+imágenes de forma insegura o incorporarlas como datos en la base de datos.
 
 Los estados historicos `0` y `1` de `habit_checks` mantienen su significado. El
 nuevo valor `2` representa "no aplicable" y queda fuera del numerador y del

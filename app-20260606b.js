@@ -1,4 +1,4 @@
-// Build 2026-07-24: health event details and clinical evolution history.
+// Build 2026-07-24b: direct clinical update action from health event lists.
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
@@ -1159,7 +1159,7 @@ function healthEventCard(event, resolved) {
     ${event.body_area ? `<div class="med-detail"><b>Zona corporal:</b> ${escapeHtml(event.body_area)}</div>` : ""}
     ${habitNames.length ? `<div class="med-detail"><b>Habitos afectados:</b> ${escapeHtml(habitNames.join(", "))}</div>` : ""}
     <div class="health-update-count">${updates.length} actualizacion${updates.length === 1 ? "" : "es"}</div>
-    <div class="med-actions"><button class="primary" data-health-action="detail" data-health-id="${event.id}" type="button">Ver detalle</button><button class="ghost" data-health-action="edit" data-health-id="${event.id}" type="button">Editar datos principales</button>${actions}<button class="danger" data-health-action="delete" data-health-id="${event.id}" type="button">Eliminar</button></div>
+    <div class="med-actions"><button class="primary" data-health-action="add-update" data-health-id="${event.id}" type="button">Añadir actualización</button><button class="ghost" data-health-action="detail" data-health-id="${event.id}" type="button">Ver detalle</button><button class="ghost" data-health-action="edit" data-health-id="${event.id}" type="button">Editar datos principales</button>${actions}<button class="danger" data-health-action="delete" data-health-id="${event.id}" type="button">Eliminar</button></div>
   </article>`;
 }
 
@@ -1438,6 +1438,7 @@ async function handleHealthUpdateAction(action, updateId) {
 async function handleHealthEventAction(action, id) {
   const event = healthCache.eventById.get(Number(id));
   if (!event) return;
+  if (action === "add-update") return showHealthUpdateForm(id);
   if (action === "detail") return showHealthEventDetail(id);
   if (action === "edit") return showHealthEventForm(event);
   if (action === "reopen") return showHealthUpdateForm(id, null, "reopen");

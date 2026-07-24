@@ -48,3 +48,9 @@ test("resolution and reactivation create history entries with forced status sync
   assert.match(app, /healthUpdateStatus\.value = "active"/);
   assert.match(app, /La nota clínica es obligatoria/);
 });
+
+test("each event card exposes the shared add-update flow directly", () => {
+  assert.match(app, /data-health-action="add-update"[^>]*data-health-id="\$\{event\.id\}"[^>]*>Añadir actualización<\/button>/);
+  assert.match(app, /if \(action === "add-update"\) return showHealthUpdateForm\(id\)/);
+  assert.match(app, /data-health-action="detail"[^>]*data-health-id="\$\{event\.id\}"[^>]*>Ver detalle<\/button>/);
+});

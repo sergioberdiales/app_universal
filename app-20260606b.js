@@ -1,4 +1,4 @@
-// Build 2026-07-24b: direct clinical update action from health event lists.
+// Build 2026-08-04: habit notes, archiving reasons, reactivation and active periods.
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
@@ -60,6 +60,8 @@ const habitCounter = document.getElementById("habitCounter");
 const habitSummary = document.getElementById("habitSummary");
 const newHabitDetails = document.getElementById("newHabitDetails");
 const exportHabitsBtn = document.getElementById("exportHabits");
+const archivedHabitCounter = document.getElementById("archivedHabitCounter");
+const archivedHabitsList = document.getElementById("archivedHabitsList");
 const openDayDetail = document.getElementById("openDayDetail");
 const openDailyNote = document.getElementById("openDailyNote");
 const dailyNoteIndicator = document.getElementById("dailyNoteIndicator");
@@ -119,6 +121,16 @@ const habitDetailComment = document.getElementById("habitDetailComment");
 const habitDetailNotApplicable = document.getElementById("habitDetailNotApplicable");
 const habitDetailError = document.getElementById("habitDetailError");
 const habitDetailClear = document.getElementById("habitDetailClear");
+const archiveHabitModal = document.getElementById("archiveHabitModal");
+const archiveHabitTitle = document.getElementById("archiveHabitTitle");
+const archiveHabitClose = document.getElementById("archiveHabitClose");
+const archiveHabitForm = document.getElementById("archiveHabitForm");
+const archiveHabitId = document.getElementById("archiveHabitId");
+const archiveHabitPrompt = document.getElementById("archiveHabitPrompt");
+const archiveHabitReason = document.getElementById("archiveHabitReason");
+const archiveHabitError = document.getElementById("archiveHabitError");
+const archiveHabitCancel = document.getElementById("archiveHabitCancel");
+const archiveHabitSubmit = document.getElementById("archiveHabitSubmit");
 const dailyNoteModal = document.getElementById("dailyNoteModal");
 const dailyNoteClose = document.getElementById("dailyNoteClose");
 const dailyNoteForm = document.getElementById("dailyNoteForm");
@@ -175,7 +187,7 @@ let medicationCache = {
 };
 let healthCache = { events: [], eventById: new Map(), updatesByEvent: new Map(), affectedHabitIdsByEvent: new Map(), habits: [] };
 let selectedHealthEventId = null;
-let habitDayCache = { habits: [], checksByHabit: new Map(), date: "", dailyNote: null };
+let habitDayCache = { habits: [], allHabits: [], periodsByHabit: new Map(), checksByHabit: new Map(), date: "", dailyNote: null };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PASSWORD_MIN_LENGTH = 6;
@@ -320,6 +332,33 @@ function isValidDateOnly(dateString) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
   const date = parseDateOnly(dateString);
   return !Number.isNaN(date.getTime()) && dateToDateOnlyString(date) === dateString;
+}
+
+function habitArchiveReasonLabel(value) {
+  return ({
+    consolidated: "He consolidado el habito",
+    goal_achieved: "He alcanzado mi objetivo",
+    no_longer_relevant: "Este habito ya no es relevante",
+    replaced: "Lo he sustituido por otro habito",
+    circumstances: "No se adapta a mis circunstancias",
+    created_by_mistake: "Lo cree por error o esta duplicado",
+    other: "Otro motivo",
+  })[value] || "Motivo no disponible";
+}
+
+function groupHabitPeriods(periods) {
+  const periodsByHabit = new Map();
+  for (const period of periods) {
+    const habitId = Number(period.habit_id);
+    if (!periodsByHabit.has(habitId)) periodsByHabit.set(habitId, []);
+    periodsByHabit.get(habitId).push(period);
+  }
+  return periodsByHabit;
+}
+
+function isHabitActiveOnDate(habitId, date, periodsByHabit) {
+  const periods = periodsByHabit.get(Number(habitId)) || [];
+  return periods.some((period) => period.started_on <= date && (!period.ended_on || date < period.ended_on));
 }
 
 function formatWeekLabel(startDate, endDate) {
@@ -801,11 +840,11 @@ function renderWeightTable(records) {
   contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
 }
 
-function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, statsByHabit, date) {
+function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, statsByHabit, periodsByHabit, date, hasAnyHabits = false) {
   if (habits.length === 0) {
-    habitsTable.innerHTML = '<tr class="empty"><td colspan="2">Aun no hay habitos creados.</td></tr>';
+    habitsTable.innerHTML = `<tr class="empty"><td colspan="2">${hasAnyHabits ? "No hay habitos activos en esta fecha." : "Aun no hay habitos creados."}</td></tr>`;
     habitCounter.textContent = "0 habitos";
-    habitSummary.textContent = "Crea tu primer habito para empezar.";
+    habitSummary.textContent = hasAnyHabits ? "Consulta otra fecha o reactiva un habito archivado." : "Crea tu primer habito para empezar.";
     return;
   }
 
@@ -836,9 +875,10 @@ function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, stats
       const streakDots = [];
       for (let offset = 6; offset >= 0; offset -= 1) {
         const day = addDaysToDateString(date, -offset);
+        const activeOnDay = isHabitActiveOnDate(habitId, day, periodsByHabit);
         const dayStatus = perDayStatus.has(day) ? Number(perDayStatus.get(day)) : null;
-        const dotClass = dayStatus === 1 ? "yes" : dayStatus === 0 ? "no" : dayStatus === 2 ? "not-applicable" : "pending";
-        const dotLabel = dayStatus === 1 ? "Si" : dayStatus === 0 ? "No" : dayStatus === 2 ? "No aplicable" : "Sin registro";
+        const dotClass = !activeOnDay ? "archived" : dayStatus === 1 ? "yes" : dayStatus === 0 ? "no" : dayStatus === 2 ? "not-applicable" : "pending";
+        const dotLabel = !activeOnDay ? "No estaba activo" : dayStatus === 1 ? "Si" : dayStatus === 0 ? "No" : dayStatus === 2 ? "No aplicable" : "Sin registro";
         streakDots.push(
           `<span class="streak-dot ${dotClass}" title="${day}: ${dotLabel}" aria-label="${day}: ${dotLabel}"></span>`
         );
@@ -854,6 +894,9 @@ function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, stats
             habit.name
           )}</button>`
         : `<div class="habit-name">${escapeHtml(habit.name)}</div>`;
+      const archiveAction = habit.is_active
+        ? `<button type="button" class="habit-archive-btn" data-archive-habit="${habit.id}" aria-label="Dejar de seguir ${escapeHtml(habit.name)}">Dejar de seguir</button>`
+        : "";
 
       return `
         <tr>
@@ -867,7 +910,8 @@ function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, stats
             <div class="habit-checks">
               <button type="button" class="habit-btn yes ${yesActive}" data-habit-id="${habit.id}" data-status="1">Si</button>
               <button type="button" class="habit-btn no ${noActive}" data-habit-id="${habit.id}" data-status="0">No</button>
-              <button type="button" class="habit-detail-btn" data-habit-detail="${habit.id}" aria-label="Añadir detalle a ${escapeHtml(habit.name)}">Detalle${selectedCheck && (selectedCheck.comment || selectedCheck.reason || selectedCheck.health_event_id || status === 2) ? '<span class="detail-indicator" aria-label="Tiene detalles">●</span>' : ""}</button>
+              <button type="button" class="habit-detail-btn" data-habit-detail="${habit.id}" aria-label="Añadir nota a ${escapeHtml(habit.name)}">Nota${selectedCheck && (selectedCheck.comment || selectedCheck.reason || selectedCheck.health_event_id || status === 2) ? '<span class="detail-indicator" aria-label="Tiene nota">●</span>' : ""}</button>
+              ${archiveAction}
             </div>
           </td>
         </tr>
@@ -912,6 +956,10 @@ function bindRenderedHabitActions() {
   for (const button of habitsTable.querySelectorAll("button[data-habit-detail]")) {
     button.addEventListener("click", () => openHabitDetail(Number(button.dataset.habitDetail)));
   }
+
+  for (const button of habitsTable.querySelectorAll("button[data-archive-habit]")) {
+    button.addEventListener("click", () => openArchiveHabit(Number(button.dataset.archiveHabit)));
+  }
 }
 
 function closeModal(modal) {
@@ -935,7 +983,7 @@ function openHabitDetail(habitId) {
   if (!habit) return;
   const check = habitDayCache.checksByHabit.get(Number(habitId)) || null;
   habitDetailHabitId.value = String(habitId);
-  habitDetailTitle.textContent = `Detalle · ${habit.name}`;
+  habitDetailTitle.textContent = `Nota · ${habit.name}`;
   habitDetailReason.value = check?.reason || "";
   habitDetailComment.value = check?.comment || "";
   habitDetailNotApplicable.checked = Number(check?.status) === 2;
@@ -945,6 +993,79 @@ function openHabitDetail(habitId) {
   habitEventSuggestion.classList.toggle("hidden", !relatedActive);
   habitDetailError.textContent = "";
   openModal(habitDetailModal);
+}
+
+function renderArchivedHabits(habits) {
+  const archived = habits
+    .filter((habit) => !habit.is_active)
+    .sort((a, b) => String(b.archived_at || "").localeCompare(String(a.archived_at || "")));
+  archivedHabitCounter.textContent = `${archived.length} habito${archived.length === 1 ? "" : "s"}`;
+  archivedHabitsList.innerHTML = archived.length
+    ? archived.map((habit) => `<article class="archived-habit-item">
+        <div>
+          <div class="archived-habit-name">${escapeHtml(habit.name)}</div>
+          <div class="archived-habit-meta">${escapeHtml(habitArchiveReasonLabel(habit.archive_reason))}${habit.archived_at ? ` · ${formatDate(habit.archived_at)}` : ""}</div>
+        </div>
+        <button class="secondary" type="button" data-reactivate-habit="${habit.id}">Reactivar</button>
+      </article>`).join("")
+    : '<div class="empty-message">No hay habitos archivados.</div>';
+}
+
+function openArchiveHabit(habitId) {
+  const habit = habitDayCache.allHabits.find((item) => Number(item.id) === Number(habitId));
+  if (!habit || !habit.is_active) return;
+  archiveHabitId.value = String(habitId);
+  archiveHabitReason.value = "";
+  archiveHabitError.textContent = "";
+  archiveHabitTitle.textContent = `Dejar de seguir · ${habit.name}`;
+  archiveHabitPrompt.textContent = `¿Por que quieres dejar de seguir “${habit.name}”?`;
+  openModal(archiveHabitModal);
+  archiveHabitReason.focus();
+}
+
+async function handleArchiveHabit(event) {
+  event.preventDefault();
+  const habitId = Number(archiveHabitId.value);
+  const reason = archiveHabitReason.value;
+  if (!habitId || !reason) {
+    archiveHabitError.textContent = "Selecciona un motivo para continuar.";
+    return;
+  }
+  archiveHabitSubmit.disabled = true;
+  archiveHabitError.textContent = "";
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/rpc/archive_habit`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify({ p_habit_id: habitId, p_reason: reason, p_effective_on: todayLocalDateString() }),
+    });
+    closeModal(archiveHabitModal);
+    await Promise.all([refreshHabits(), refreshHealthEvents()]);
+    setMessage("Habito archivado. Podras reactivarlo desde Herramientas de habitos.");
+  } catch (error) {
+    archiveHabitError.textContent = translateDataError(error.message);
+  } finally {
+    archiveHabitSubmit.disabled = false;
+  }
+}
+
+async function handleReactivateHabit(habitId) {
+  const habit = habitDayCache.allHabits.find((item) => Number(item.id) === Number(habitId));
+  if (!habit || habit.is_active) return;
+  const button = archivedHabitsList.querySelector(`button[data-reactivate-habit="${habitId}"]`);
+  if (button) button.disabled = true;
+  try {
+    await apiFetch(`${SUPABASE_URL}/rest/v1/rpc/reactivate_habit`, {
+      method: "POST",
+      headers: authHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify({ p_habit_id: Number(habitId), p_effective_on: todayLocalDateString() }),
+    });
+    await Promise.all([refreshHabits(), refreshHealthEvents()]);
+    setMessage(`Habito “${habit.name}” reactivado.`);
+  } catch (error) {
+    setMessage(`No se pudo reactivar el habito: ${translateDataError(error.message)}`);
+    if (button) button.disabled = false;
+  }
 }
 
 async function saveHabitDetails(event) {
@@ -966,7 +1087,7 @@ async function saveHabitDetails(event) {
     await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?on_conflict=user_id,habit_id,log_date`, { method: "POST", headers: authHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }), body: JSON.stringify([row]) });
     closeModal(habitDetailModal);
     await refreshHabits();
-    setMessage("Detalles del habito guardados.");
+    setMessage("Nota del habito guardada.");
   } catch (error) {
     habitDetailError.textContent = translateDataError(error.message);
   }
@@ -981,7 +1102,7 @@ async function clearHabitDetails() {
     await apiFetch(`${SUPABASE_URL}/rest/v1/habit_checks?${params.toString()}`, { method: "PATCH", headers: authHeaders({ Prefer: "return=minimal" }), body: JSON.stringify({ comment: null, reason: Number(existing.status) === 2 ? "not_applicable" : null, health_event_id: null }) });
     closeModal(habitDetailModal);
     await refreshHabits();
-    setMessage("Detalles eliminados.");
+    setMessage("Nota eliminada.");
   } catch (error) {
     habitDetailError.textContent = error.message;
   }
@@ -1595,7 +1716,8 @@ function setAuthenticatedUI(isAuthenticated, options = {}) {
   setStatus("Inicia sesion para usar la app.");
   resetTabStatus();
   renderWeightTable([]);
-  renderHabitTable([], new Map(), new Map(), new Map(), getSelectedHabitDate());
+  renderHabitTable([], new Map(), new Map(), new Map(), new Map(), getSelectedHabitDate());
+  renderArchivedHabits([]);
   resetHealthUI();
   resetMedicationUI();
   resetReportsUI();
@@ -1626,7 +1748,7 @@ async function fetchHabits() {
   if (!currentSession) return [];
 
   const params = createUserScopedParams({
-    select: "id,name,description,is_active,created_at",
+    select: "id,name,description,is_active,archived_at,archive_reason,created_at",
     is_active: "eq.true",
     order: "created_at.asc",
   });
@@ -1645,7 +1767,7 @@ async function fetchAllHabits() {
   if (!currentSession) return [];
 
   const params = createUserScopedParams({
-    select: "id,name,description,is_active,created_at",
+    select: "id,name,description,is_active,archived_at,archive_reason,created_at",
     order: "created_at.asc",
   });
 
@@ -1655,6 +1777,19 @@ async function fetchAllHabits() {
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${currentSession.access_token}`,
     },
+  });
+}
+
+async function fetchHabitActivityPeriods() {
+  await refreshSessionIfNeeded();
+  if (!currentSession) return [];
+  const params = createUserScopedParams({
+    select: "id,habit_id,started_on,ended_on,archive_reason,archived_at,created_at",
+    order: "started_on.asc,id.asc",
+  });
+  return apiFetchAllRows(`${SUPABASE_URL}/rest/v1/habit_activity_periods?${params.toString()}`, {
+    method: "GET",
+    headers: authHeaders(),
   });
 }
 
@@ -1887,7 +2022,14 @@ async function refreshHabits() {
   const logDate = getSelectedHabitDate();
   const today = todayLocalDateString();
   const fetchUntilDate = logDate > today ? logDate : today;
-  const [habits, checksUntilDate, dailyNote] = await Promise.all([fetchHabits(), fetchHabitChecksUntil(fetchUntilDate), fetchDailyNote(logDate)]);
+  const [allHabits, periods, checksUntilDate, dailyNote] = await Promise.all([
+    fetchAllHabits(),
+    fetchHabitActivityPeriods(),
+    fetchHabitChecksUntil(fetchUntilDate),
+    fetchDailyNote(logDate),
+  ]);
+  const periodsByHabit = groupHabitPeriods(periods);
+  const habits = allHabits.filter((habit) => isHabitActiveOnDate(habit.id, logDate, periodsByHabit));
 
   const selectedCheckByHabit = new Map();
   const statusByHabitDate = new Map();
@@ -1905,6 +2047,7 @@ async function refreshHabits() {
       selectedCheckByHabit.set(habitId, check);
     }
 
+    if (!isHabitActiveOnDate(habitId, day, periodsByHabit)) continue;
     if (!statsByHabit.has(habitId)) statsByHabit.set(habitId, { completed: 0, denominator: 0, notApplicable: 0 });
     const stats = statsByHabit.get(habitId);
     if (status === 1) { stats.completed += 1; stats.denominator += 1; }
@@ -1912,15 +2055,13 @@ async function refreshHabits() {
     if (status === 2) stats.notApplicable += 1;
   }
 
-  habitDayCache = { habits, checksByHabit: selectedCheckByHabit, date: logDate, dailyNote };
+  habitDayCache = { habits, allHabits, periodsByHabit, checksByHabit: selectedCheckByHabit, date: logDate, dailyNote };
   dailyNoteIndicator.classList.toggle("hidden", !dailyNote);
   openDailyNote.textContent = dailyNote ? "Editar nota del dia" : "Añadir nota del dia";
-  renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, statsByHabit, logDate);
+  renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, statsByHabit, periodsByHabit, logDate, allHabits.length > 0);
+  renderArchivedHabits(allHabits);
 
-  const activeHabitsToday = habits.filter((habit) => {
-    const createdDate = (habit.created_at || "").slice(0, 10);
-    return !createdDate || createdDate <= today;
-  });
+  const activeHabitsToday = allHabits.filter((habit) => isHabitActiveOnDate(habit.id, today, periodsByHabit));
 
   let habitsDoneToday = 0;
   let habitsEvaluableToday = 0;
@@ -2297,9 +2438,10 @@ async function handleExportAllData() {
   if (!ok) return;
 
   try {
-    const [weights, habits, habitChecks, healthEvents, healthEventUpdates, healthEventHabits, dailyNotes, prescribedMedications] = await Promise.all([
+    const [weights, habits, habitActivityPeriods, habitChecks, healthEvents, healthEventUpdates, healthEventHabits, dailyNotes, prescribedMedications] = await Promise.all([
       fetchWeightRecords(),
-      fetchHabits(),
+      fetchAllHabits(),
+      fetchHabitActivityPeriods(),
       fetchHabitChecksAll(),
       fetchHealthEvents(),
       fetchHealthEventUpdates(),
@@ -2313,6 +2455,7 @@ async function handleExportAllData() {
       user_id: getCurrentUserId(),
       weights,
       habits,
+      habit_activity_periods: habitActivityPeriods,
       habit_checks: habitChecks,
       health_events: healthEvents,
       health_event_updates: healthEventUpdates,
@@ -2624,7 +2767,7 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeHeaderMenu();
-      for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal, healthEventDetailModal, healthUpdateModal]) closeModal(modal);
+      for (const modal of [habitDetailModal, archiveHabitModal, dailyNoteModal, dayDetailModal, healthEventDetailModal, healthUpdateModal]) closeModal(modal);
     }
   });
 
@@ -2652,6 +2795,12 @@ function bindEvents() {
 
   exportHabitsBtn.addEventListener("click", async () => {
     await handleExportHabits();
+  });
+
+  archivedHabitsList.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-reactivate-habit]");
+    if (!button) return;
+    await handleReactivateHabit(Number(button.dataset.reactivateHabit));
   });
 
   importarInput.addEventListener("change", async (event) => {
@@ -2727,13 +2876,17 @@ function bindEvents() {
   habitDetailClose.addEventListener("click", () => closeModal(habitDetailModal));
   habitDetailForm.addEventListener("submit", saveHabitDetails);
   habitDetailClear.addEventListener("click", clearHabitDetails);
+  archiveHabitClose.addEventListener("click", () => closeModal(archiveHabitModal));
+  archiveHabitCancel.addEventListener("click", () => closeModal(archiveHabitModal));
+  archiveHabitForm.addEventListener("submit", handleArchiveHabit);
+  archiveHabitReason.addEventListener("change", () => { archiveHabitError.textContent = ""; });
   openDailyNote.addEventListener("click", showDailyNoteModal);
   dailyNoteClose.addEventListener("click", () => closeModal(dailyNoteModal));
   dailyNoteForm.addEventListener("submit", saveDailyNote);
   dailyNoteDelete.addEventListener("click", deleteDailyNote);
   openDayDetail.addEventListener("click", showDayDetail);
   dayDetailClose.addEventListener("click", () => closeModal(dayDetailModal));
-  for (const modal of [habitDetailModal, dailyNoteModal, dayDetailModal, healthEventDetailModal, healthUpdateModal]) {
+  for (const modal of [habitDetailModal, archiveHabitModal, dailyNoteModal, dayDetailModal, healthEventDetailModal, healthUpdateModal]) {
     modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(modal); });
   }
 

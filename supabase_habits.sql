@@ -5,8 +5,15 @@ create table if not exists public.habits (
   name text not null check (char_length(trim(name)) > 0),
   description text,
   is_active boolean not null default true,
+  archived_at timestamptz,
+  archive_reason text check (
+    archive_reason is null or archive_reason in ('consolidated', 'goal_achieved', 'no_longer_relevant', 'replaced', 'circumstances', 'created_by_mistake', 'other')
+  ),
   created_at timestamptz not null default now()
 );
+
+-- Apply supabase_habit_archiving.sql after this base schema to add reversible
+-- archive/reactivation functions and the habit_activity_periods history.
 
 create unique index if not exists habits_user_name_key
 on public.habits (user_id, lower(name));

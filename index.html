@@ -17,7 +17,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=pwa-20260424a" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=pwa-20260424a" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=pwa-20260424a" />
-    <link rel="stylesheet" href="styles.css?v=health-history-20260724" />
+    <link rel="stylesheet" href="styles.css?v=habit-archive-20260804" />
   </head>
   <body>
     <div class="bg"></div>
@@ -178,6 +178,16 @@
               <p class="hint">
                 El CSV incluye estado, motivo, comentario y evento de salud relacionado.
               </p>
+              <section class="archived-habits-section" aria-labelledby="archivedHabitsTitle">
+                <div class="table-header">
+                  <h3 id="archivedHabitsTitle">Habitos archivados</h3>
+                  <span id="archivedHabitCounter" class="chip">0 habitos</span>
+                </div>
+                <p class="hint">Puedes reactivar un habito sin perder sus registros anteriores.</p>
+                <div id="archivedHabitsList" class="archived-habits-list">
+                  <div class="empty-message">No hay habitos archivados.</div>
+                </div>
+              </section>
             </details>
           </section>
         </section>
@@ -371,7 +381,7 @@
 
     <div id="habitDetailModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="habitDetailTitle">
       <section class="modal-card">
-        <div class="table-header"><h2 id="habitDetailTitle">Detalle del habito</h2><button id="habitDetailClose" class="ghost" type="button">Cerrar</button></div>
+        <div class="table-header"><h2 id="habitDetailTitle">Nota del habito</h2><button id="habitDetailClose" class="ghost" type="button">Cerrar</button></div>
         <form id="habitDetailForm" class="detail-form">
           <input id="habitDetailHabitId" type="hidden" />
           <label class="field"><span>Motivo</span><select id="habitDetailReason"><option value="">Sin motivo</option><option value="health">Salud</option><option value="injury">Lesion</option><option value="fatigue">Cansancio</option><option value="stress">Estres</option><option value="lack_of_time">Falta de tiempo</option><option value="travel">Viaje</option><option value="social_event">Evento social</option><option value="emotional_event">Evento emocional</option><option value="not_applicable">No aplicable</option><option value="other">Otro</option></select></label>
@@ -380,7 +390,21 @@
           <label class="field"><span>Comentario breve</span><textarea id="habitDetailComment" rows="3"></textarea></label>
           <label class="secondary-status-action"><input id="habitDetailNotApplicable" type="checkbox" /> Marcar como no aplicable</label>
           <div id="habitDetailError" class="form-error" role="alert"></div>
-          <div class="modal-actions"><button id="habitDetailClear" class="ghost" type="button">Quitar detalles</button><button class="primary" type="submit">Guardar detalles</button></div>
+          <div class="modal-actions"><button id="habitDetailClear" class="ghost" type="button">Quitar nota</button><button class="primary" type="submit">Guardar nota</button></div>
+        </form>
+      </section>
+    </div>
+
+    <div id="archiveHabitModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="archiveHabitTitle">
+      <section class="modal-card">
+        <div class="table-header"><h2 id="archiveHabitTitle">Dejar de seguir el habito</h2><button id="archiveHabitClose" class="ghost" type="button">Cerrar</button></div>
+        <form id="archiveHabitForm" class="detail-form">
+          <input id="archiveHabitId" type="hidden" />
+          <p id="archiveHabitPrompt" class="modal-copy"></p>
+          <label class="field"><span>Motivo</span><select id="archiveHabitReason" required><option value="">Selecciona un motivo</option><option value="consolidated">He consolidado el habito</option><option value="goal_achieved">He alcanzado mi objetivo</option><option value="no_longer_relevant">Este habito ya no es relevante</option><option value="replaced">Lo he sustituido por otro habito</option><option value="circumstances">No se adapta a mis circunstancias</option><option value="created_by_mistake">Lo cree por error o esta duplicado</option><option value="other">Otro motivo</option></select></label>
+          <p class="archive-explanation">Dejara de aparecer en el seguimiento diario, pero conservaras todo su historial y podras reactivarlo.</p>
+          <div id="archiveHabitError" class="form-error" role="alert"></div>
+          <div class="modal-actions"><button id="archiveHabitCancel" class="ghost" type="button">Cancelar</button><button id="archiveHabitSubmit" class="danger" type="submit">Dejar de seguir</button></div>
         </form>
       </section>
     </div>
@@ -420,7 +444,7 @@
       </section>
     </div>
 
-    <script src="app-20260606b.js?v=health-update-list-action-20260724"></script>
+    <script src="app-20260606b.js?v=habit-archive-20260804"></script>
     <script src="pwa.js?v=pwa-20260424a"></script>
   </body>
 </html>

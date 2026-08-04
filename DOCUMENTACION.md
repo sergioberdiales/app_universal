@@ -11,6 +11,7 @@ Registro Personal es una aplicación web estática para llevar el seguimiento de
 - Historial de medicamentos prescritos por periodos.
 - Eventos de salud puntuales o prolongados y su relacion opcional con habitos.
 - Comentarios, motivos y notas diarias opcionales.
+- Archivado reversible de habitos con motivo e historial de periodos activos.
 - Informes semanales de hábitos y peso.
 
 La aplicación se publica mediante GitHub Pages y utiliza Supabase para la
@@ -54,6 +55,7 @@ Las tablas más relevantes para los hábitos son:
 
 - `habits`: definición de los hábitos.
 - `habit_checks`: registro diario Sí/No.
+- `habit_activity_periods`: periodos durante los que cada hábito estuvo activo.
 
 Cada fila de `habit_checks` contiene, entre otros, estos campos:
 
@@ -105,6 +107,14 @@ nuevo valor `2` representa "no aplicable" y queda fuera del numerador y del
 denominador de cumplimiento. Los dias sin fila siguen siendo "sin registro" y
 no se convierten en incumplimientos.
 
+Los habitos no se borran desde la interfaz: se archivan mediante
+`archive_habit`, indicando uno de los motivos cerrados admitidos. La función
+`reactivate_habit` vuelve a activarlos y abre un nuevo periodo. Los periodos
+usan fechas semiabiertas (`started_on` incluido y `ended_on` excluido), de modo
+que los intervalos archivados no aparecen como dias pendientes. La migracion
+correspondiente esta en `supabase_habit_archiving.sql` y debe aplicarse antes de
+publicar el frontend que utiliza esta funcionalidad.
+
 ## Seguridad
 
 Las tablas deben tener RLS habilitado y políticas que permitan a cada usuario
@@ -117,6 +127,7 @@ Los scripts relacionados con la configuración de seguridad son:
 - `supabase_multiuser.sql`
 - `supabase_prescribed_medications.sql`
 - `supabase_health_events.sql`
+- `supabase_habit_archiving.sql`
 
 El aviso de Supabase **Table publicly accessible** indica que alguna tabla del
 esquema `public` no tiene RLS habilitado. Debe corregirse, aunque no implica

@@ -481,6 +481,11 @@ td {
   box-shadow: inset 0 0 0 2px #fff;
 }
 
+.streak-dot.archived {
+  background: transparent;
+  border: 1px solid #c9c4d4;
+}
+
 .habit-description {
   margin-top: 8px;
   color: var(--muted);
@@ -502,6 +507,17 @@ td {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
+  box-shadow: none;
+  font-size: 0.82rem;
+}
+
+.habit-archive-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-color: transparent;
+  background: transparent;
+  color: #a45c58;
   box-shadow: none;
   font-size: 0.82rem;
 }
@@ -615,6 +631,58 @@ details[open] summary::before {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.archived-habits-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--stroke);
+}
+
+.archived-habits-section h3 {
+  margin: 0;
+}
+
+.archived-habits-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.archived-habit-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: #faf9fc;
+}
+
+.archived-habit-name {
+  font-weight: 700;
+}
+
+.archived-habit-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.modal-copy {
+  margin: 0;
+  color: var(--ink);
+}
+
+.archive-explanation {
+  margin: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f4f3ff;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
 }
 
 .file-btn {
@@ -1081,6 +1149,7 @@ details[open] summary::before {
   .menu-toggle,
   .habit-checks .habit-btn,
   .habit-detail-btn,
+  .habit-archive-btn,
   .habit-name-toggle {
     width: auto;
   }
@@ -1100,6 +1169,11 @@ details[open] summary::before {
 
   .habit-checks {
     width: 100%;
+  }
+
+  .archived-habit-item {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .health-subnav { flex-direction: column; }

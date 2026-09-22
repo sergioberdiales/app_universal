@@ -356,3 +356,71 @@ La cobertura debe consultarse antes de interpretar un porcentaje alto con pocos
 registros. El porcentaje histórico existente y los informes no se modifican.
 
 Verificación local: `node --check app-20260606b.js` y `node --test tests/*.test.mjs`.
+
+### Revisión de la PR #1 y publicación pendiente
+
+Revisión local del 22 de septiembre de 2026:
+
+- 12 pruebas Node pasan con `TZ=Europe/Madrid`; sintaxis de los tres scripts JS
+  y `git diff --check` correctos.
+- Chrome de escritorio, ventanas de 360, 390 y 1280 px: inspección de capturas,
+  detalles y formulario de alta abiertos; sin desbordamiento de página ni tabla.
+  En móvil, acciones debajo del hábito para dar anchura al editor. Desplegables
+  sin flechas duplicadas y controles de indicadores de al menos 44 px de alto.
+- API **simulada**: alta con 40%, edición a 0 y 100, eliminación a `null` y
+  recargas; comprobados cuerpo y filtro de usuario. Sin errores JS.
+- PostgreSQL **temporal**, con `auth.uid()` simulado y dos usuarios ficticios:
+  migración aplicada dos veces, conservación de datos y de las cuatro políticas,
+  RLS habilitado, límites 0/100, rechazo de −1/101, alta/edición/eliminación,
+  lectura/escritura aisladas entre usuarios.
+- PWA local: instalación del shell v14, eliminación de una caché v12 sembrada
+  y recarga offline con HTML, CSS y JavaScript nuevos. No se ha probado una
+  actualización sobre una instalación real de móvil ni Safari/iOS.
+
+La cobertura muestra siempre días activos y advierte cuando hay menos de siete
+días activos o respuestas evaluables. Es un aviso descriptivo, no un umbral de
+significación estadística. La comparación sigue usando el porcentaje sin redondear.
+
+Los ensayos reproducibles están en `tests/manual/`: servir el repositorio con
+`python3 -m http.server 8765 --bind 127.0.0.1`, disponer de Playwright y ejecutar
+los dos archivos `.browser.cjs` con Node (opcional: `CHROME_PATH` para Chrome).
+El ensayo SQL se ejecuta con `psql -v ON_ERROR_STOP=1 -f tests/manual/habit_targets_rls.sql` **solo en una base desechable vacía**, nunca
+en Supabase real: crea un esquema de autenticación simulado.
+
+**Pendiente:** no hay acceso administrativo ni entorno Supabase de pruebas
+conectado. No se han probado Auth/PostgREST reales ni modificado registros
+personales, producción o `main`.
+
+Orden obligatorio de publicación, previa confirmación de Sergio:
+
+1. Abrir Supabase → proyecto App Universal → SQL Editor. Ejecutar exactamente
+   `supabase_habit_targets.sql` de esta rama (no el script completo).
+2. Ejecutar la comprobación siguiente. Debe devolver `smallint`, nullable `YES`,
+   sin valor por defecto, restricción validada 0–100, RLS `true` y las políticas
+   de propietario existentes. Ante una diferencia, detener la publicación.
+
+```sql
+select data_type, is_nullable, column_default
+from information_schema.columns
+where table_schema = 'public' and table_name = 'habits'
+  and column_name = 'target_percentage';
+
+select conname, convalidated, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'public.habits'::regclass
+  and conname = 'habits_target_percentage_check';
+
+select relrowsecurity from pg_class where oid = 'public.habits'::regclass;
+select policyname, cmd, qual, with_check
+from pg_policies where schemaname = 'public' and tablename = 'habits';
+```
+
+3. Con cuentas y hábitos exclusivamente de prueba, verificar contra Supabase
+   real alta, edición, eliminación y recarga, y que otra cuenta no pueda leer
+   ni modificar esos hábitos. Puede hacerse desde la rama servida localmente.
+4. Solo después de verificar migración y persistencia, y con confirmación para
+   integrar, fusionar la PR en `main`. Comprobar GitHub Pages, `version.txt`
+   (`build=2026-09-22-habit-targets-review`) y actualización de la PWA.
+
+Si se revierte el frontend, conservar la columna opcional: quitarla destruiría
+los objetivos guardados y no es necesario para volver al frontend anterior.

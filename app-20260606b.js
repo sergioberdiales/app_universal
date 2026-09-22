@@ -873,9 +873,10 @@ function renderHabitWindows(habit, date, statuses, periodsByHabit) {
     const stats = habitWindowStats(habit.id, date, days, statuses, periodsByHabit);
     const label = stats.percentage === null ? "—" : `${Math.round(stats.percentage)}%`;
     const comparison = stats.percentage === null || target == null ? "" : stats.percentage >= target ? " · Objetivo alcanzado" : " · Por debajo del objetivo";
-    const partial = stats.active < days ? ` · ${stats.active}/${days} días activos` : "";
+    const partial = ` · ${stats.active}/${days} días activos`;
+    const warning = stats.active < 7 ? " Pocos días activos (menos de 7); interpreta el porcentaje con cautela." : stats.recorded < 7 ? " Pocas respuestas evaluables (menos de 7); interpreta el porcentaje con cautela." : "";
     return `<details class="habit-window"><summary>${days}d: <strong>${label}</strong></summary>
-      <p>Hasta ${date}: ${stats.completed} cumplidos de ${stats.recorded} registrados (Sí/No); ${stats.missing} sin registrar; ${stats.notApplicable} no aplicables${partial}${comparison}.</p></details>`;
+      <p>Hasta ${date}: ${stats.completed} cumplidos de ${stats.recorded} registrados (Sí/No); ${stats.missing} sin registrar; ${stats.notApplicable} no aplicables${partial}${comparison}.${warning}</p></details>`;
   }).join("");
   return `<div class="habit-windows" aria-label="Cumplimiento por periodo">${windows}</div>
     <details class="habit-target"><summary>Objetivo: ${target == null ? "sin definir" : `${target}%`} · Editar</summary>

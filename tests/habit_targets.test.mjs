@@ -68,3 +68,12 @@ test('rendered indicators expose coverage, no data, partial history and unrounde
   assert.match(output, /2 cumplidos de 3 registrados/);
   assert.match(render({ id: 1, target_percentage: 0 }, '2026-09-22', data, periods), /Objetivo: 0%/);
 });
+
+// Sparse coverage must be explicit, including a long-lived habit with few answers.
+test('coverage warns about fewer than seven active days or evaluable answers', () => {
+  assert.match(render({ id: 1 }, '2026-01-02', new Map(), periods), /Pocos días activos/);
+  assert.match(render({ id: 1 }, '2026-09-22', new Map([['2026-09-22', 1]]), periods), /Pocas respuestas evaluables/);
+  const data = new Map(Array.from({length: 7}, (_, i) => [context.addDaysToDateString('2026-09-22', -i), 1]));
+  assert.doesNotMatch(render({ id: 1 }, '2026-09-22', data, periods), /con cautela/);
+  assert.match(render({ id: 1 }, '2026-09-22', new Map(), new Map()), /30d: <strong>—/);
+});

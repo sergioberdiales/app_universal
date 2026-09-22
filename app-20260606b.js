@@ -1,4 +1,4 @@
-// Build 2026-08-04: habit notes, archiving reasons, reactivation and active periods.
+// Build 2026-09-22: rolling habit percentages and editable targets.
 const SUPABASE_URL = "https://uuwabhdzcxolhzhmrnhm.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d2FiaGR6Y3hvbGh6aG1ybmhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDQxNjIsImV4cCI6MjA4NTk4MDE2Mn0.lC0yej-sbLVVSQZcizU2A9E4yxpz-rY_DWUpOgjQbPU";
@@ -53,6 +53,7 @@ const limpiarBtn = document.getElementById("limpiar");
 
 const habitNameInput = document.getElementById("habitName");
 const habitDescriptionInput = document.getElementById("habitDescription");
+const habitTargetInput = document.getElementById("habitTarget");
 const createHabitBtn = document.getElementById("createHabit");
 const habitDateInput = document.getElementById("habitDate");
 const habitsTable = document.getElementById("habitsTable");
@@ -840,6 +841,81 @@ function renderWeightTable(records) {
   contador.textContent = `${records.length} registro${records.length === 1 ? "" : "s"}`;
 }
 
+// Percentages use explicit Yes/No answers only, during active periods.
+function habitWindowStats(habitId, date, days, statuses, periodsByHabit) {
+  const stats = { completed: 0, recorded: 0, active: 0, missing: 0, notApplicable: 0 };
+  for (let offset = 0; offset < days; offset += 1) {
+    const day = addDaysToDateString(date, -offset);
+    if (!isHabitActiveOnDate(habitId, day, periodsByHabit)) continue;
+    stats.active += 1;
+    const status = statuses.has(day) ? Number(statuses.get(day)) : null;
+    if (status === 1) stats.completed += 1;
+    if (status === 0 || status === 1) stats.recorded += 1;
+    else if (status === 2) stats.notApplicable += 1;
+    else stats.missing += 1;
+  }
+  stats.percentage = stats.recorded ? 100 * stats.completed / stats.recorded : null;
+  return stats;
+}
+
+function parseHabitTarget(value) {
+  if (value.trim() === "") return null;
+  const target = Number(value);
+  if (!Number.isInteger(target) || target < 0 || target > 100) {
+    throw new Error("El objetivo debe ser un porcentaje entero entre 0 y 100.");
+  }
+  return target;
+}
+
+function renderHabitWindows(habit, date, statuses, periodsByHabit) {
+  const target = habit.target_percentage;
+  const windows = [30, 90, 180].map((days) => {
+    const stats = habitWindowStats(habit.id, date, days, statuses, periodsByHabit);
+    const label = stats.percentage === null ? "—" : `${Math.round(stats.percentage)}%`;
+    const comparison = stats.percentage === null || target == null ? "" : stats.percentage >= target ? " · Objetivo alcanzado" : " · Por debajo del objetivo";
+    const partial = ` · ${stats.active}/${days} días activos`;
+    const warning = stats.active < 7 ? " Pocos días activos (menos de 7); interpreta el porcentaje con cautela." : stats.recorded < 7 ? " Pocas respuestas evaluables (menos de 7); interpreta el porcentaje con cautela." : "";
+    return `<details class="habit-window"><summary>${days}d: <strong>${label}</strong></summary>
+      <p>Hasta ${date}: ${stats.completed} cumplidos de ${stats.recorded} registrados (Sí/No); ${stats.missing} sin registrar; ${stats.notApplicable} no aplicables${partial}${comparison}.${warning}</p></details>`;
+  }).join("");
+  return `<div class="habit-windows" aria-label="Cumplimiento por periodo">${windows}</div>
+    <details class="habit-target"><summary>Objetivo: ${target == null ? "sin definir" : `${target}%`} · Editar</summary>
+      <form data-habit-target="${habit.id}">
+        <label for="target-${habit.id}">Objetivo de días cumplidos (%)</label>
+        <input id="target-${habit.id}" name="target" type="number" min="0" max="100" step="1" value="${target == null ? "" : target}" placeholder="Sin objetivo" />
+        <p class="hint">Deja el campo vacío para quitar el objetivo.</p>
+        <button class="secondary" type="submit">Guardar objetivo</button>
+        <p class="form-error" role="status"></p>
+      </form>
+    </details>`;
+}
+
+async function saveHabitTarget(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const errorLabel = form.querySelector(".form-error");
+  const button = form.querySelector("button");
+  errorLabel.textContent = "";
+  button.disabled = true;
+  try {
+    const target = parseHabitTarget(form.elements.target.value);
+    if (!await ensureAuthenticated("Inicia sesión para editar el objetivo.")) return;
+    const params = createUserScopedParams({ id: `eq.${Number(form.dataset.habitTarget)}`, select: "id" });
+    const updated = await apiFetch(`${SUPABASE_URL}/rest/v1/habits?${params.toString()}`, {
+      method: "PATCH",
+      headers: authHeaders({ Prefer: "return=representation" }),
+      body: JSON.stringify({ target_percentage: target }),
+    });
+    if (!updated?.length) throw new Error("El hábito no está disponible. Recarga la página.");
+    await refreshHabits();
+    setMessage("Objetivo actualizado.");
+  } catch (error) {
+    errorLabel.textContent = `No se pudo guardar el objetivo: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, statsByHabit, periodsByHabit, date, hasAnyHabits = false) {
   if (habits.length === 0) {
     habitsTable.innerHTML = `<tr class="empty"><td colspan="2">${hasAnyHabits ? "No hay habitos activos en esta fecha." : "Aun no hay habitos creados."}</td></tr>`;
@@ -904,6 +980,7 @@ function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, stats
             ${nameContent}
             <div class="habit-metrics">${progressLabel}</div>
             <div class="habit-streak" aria-hidden="true">${streakDots.join("")}</div>
+            ${renderHabitWindows(habit, date, perDayStatus, periodsByHabit)}
             ${description}
           </td>
           <td>
@@ -926,6 +1003,9 @@ function renderHabitTable(habits, selectedCheckByHabit, statusByHabitDate, stats
 }
 
 function bindRenderedHabitActions() {
+  for (const form of habitsTable.querySelectorAll("form[data-habit-target]")) {
+    form.addEventListener("submit", saveHabitTarget);
+  }
   const descriptionButtons = habitsTable.querySelectorAll("button[data-toggle-description]");
   for (const button of descriptionButtons) {
     button.addEventListener("click", () => {
@@ -1748,7 +1828,7 @@ async function fetchHabits() {
   if (!currentSession) return [];
 
   const params = createUserScopedParams({
-    select: "id,name,description,is_active,archived_at,archive_reason,created_at",
+    select: "id,name,description,target_percentage,is_active,archived_at,archive_reason,created_at",
     is_active: "eq.true",
     order: "created_at.asc",
   });
@@ -1767,7 +1847,7 @@ async function fetchAllHabits() {
   if (!currentSession) return [];
 
   const params = createUserScopedParams({
-    select: "id,name,description,is_active,archived_at,archive_reason,created_at",
+    select: "id,name,description,target_percentage,is_active,archived_at,archive_reason,created_at",
     order: "created_at.asc",
   });
 
@@ -2575,9 +2655,11 @@ async function handleCreateHabit() {
     return;
   }
 
+  if (!habitTargetInput.reportValidity()) return;
   createHabitBtn.disabled = true;
 
   try {
+    const target = parseHabitTarget(habitTargetInput.value);
     await apiFetch(`${SUPABASE_URL}/rest/v1/habits`, {
       method: "POST",
       headers: authHeaders({ Prefer: "return=minimal" }),
@@ -2585,6 +2667,7 @@ async function handleCreateHabit() {
         withCurrentUserId({
           name,
           description: description || null,
+          target_percentage: target,
           is_active: true,
         }),
       ]),
@@ -2592,6 +2675,7 @@ async function handleCreateHabit() {
 
     habitNameInput.value = "";
     habitDescriptionInput.value = "";
+    habitTargetInput.value = "";
     if (newHabitDetails) newHabitDetails.open = false;
 
     await refreshHabits();

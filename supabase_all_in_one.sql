@@ -1514,3 +1514,16 @@ revoke all on function public.generate_weekly_report_now(boolean) from public, a
 revoke all on function public.weekly_report_period(timestamptz, text) from public, anon;
 grant execute on function public.generate_weekly_report_now(boolean) to authenticated;
 grant execute on function public.weekly_report_period(timestamptz, text) to authenticated;
+
+-- Habit targets
+begin;
+-- Run before deploying the habit-targets frontend. Existing habits keep no target.
+-- Existing habits RLS policies also protect this column; no new grants required.
+alter table public.habits
+  add column if not exists target_percentage smallint;
+
+alter table public.habits drop constraint if exists habits_target_percentage_check;
+alter table public.habits add constraint habits_target_percentage_check
+  check (target_percentage is null or target_percentage between 0 and 100);
+
+commit;

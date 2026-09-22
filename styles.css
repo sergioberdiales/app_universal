@@ -571,7 +571,7 @@ td {
 .habit-form {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: 1.1fr 1.3fr auto;
+  grid-template-columns: 1.1fr 1.3fr 1fr auto;
   gap: 14px;
   align-items: end;
 }
@@ -588,6 +588,7 @@ details[open] {
 }
 
 summary {
+  list-style: none;
   cursor: pointer;
   font-weight: 600;
   color: var(--ink);
@@ -1178,4 +1179,27 @@ details[open] summary::before {
 
   .health-subnav { flex-direction: column; }
   .modal-actions button { width: 100%; }
+}
+
+/* Compact, touch-accessible rolling percentages below the seven daily dots. */
+.habit-windows { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 10px; font-size: 0.8rem; }
+.habit-window, .habit-target { border: 0; border-radius: 0; background: transparent; padding: 0; min-width: 0; }
+.habit-window summary::before, .habit-target summary::before { margin-right: 4px; }
+.habit-window summary, .habit-target summary { cursor: pointer; padding: 12px 0; min-height: 44px; }
+.habit-window[open] { flex-basis: 100%; }
+.habit-window p { margin: 4px 0 8px; line-height: 1.5; }
+.habit-target { margin-top: 4px; font-size: 0.8rem; }
+.habit-target form { display: grid; gap: 8px; margin-top: 8px; max-width: 24rem; }
+.habit-target input { width: 100%; min-width: 0; }
+.habit-target .hint { margin: 0; }
+
+.habit-window[open], .habit-target[open] { background: transparent; }
+.habit-target .form-error:empty { display: none; }
+.habits-table .habit-name { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .habits-table thead { display: none; }
+  .habits-table, .habits-table tbody, .habits-table tr, .habits-table td { display: block; width: 100%; }
+  .habits-table td { padding: 12px 0; border-bottom: 0; }
+  .habits-table tr { border-bottom: 1px solid var(--stroke); }
+  .habits-table .habit-checks { gap: 8px; }
 }

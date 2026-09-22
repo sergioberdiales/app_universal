@@ -17,7 +17,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=pwa-20260424a" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=pwa-20260424a" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=pwa-20260424a" />
-    <link rel="stylesheet" href="styles.css?v=habit-archive-20260804" />
+    <link rel="stylesheet" href="styles.css?v=habit-targets-20260922" />
   </head>
   <body>
     <div class="bg"></div>
@@ -161,6 +161,11 @@
                 <div class="field">
                   <label for="habitDescription">Descripcion (opcional)</label>
                   <input id="habitDescription" type="text" placeholder="Ej: 20-30 min al final del dia" />
+                </div>
+                <div class="field">
+                  <label for="habitTarget">Objetivo de días cumplidos (%) · opcional</label>
+                  <input id="habitTarget" type="number" min="0" max="100" step="1" placeholder="Ej: 40" />
+                  <span class="hint">Sobre los días registrados con Sí o No.</span>
                 </div>
                 <button id="createHabit" class="primary">Crear habito</button>
               </div>
@@ -444,7 +449,7 @@
       </section>
     </div>
 
-    <script src="app-20260606b.js?v=habit-archive-20260804"></script>
+    <script src="app-20260606b.js?v=habit-targets-20260922"></script>
     <script src="pwa.js?v=pwa-20260424a"></script>
   </body>
 </html>

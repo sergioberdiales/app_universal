@@ -1,4 +1,4 @@
-const CACHE_NAME = "registro-personal-shell-v12-habit-archive";
+const CACHE_NAME = "registro-personal-shell-v13-habit-targets";
 const APP_SHELL = [
   "./",
   "./index.html",

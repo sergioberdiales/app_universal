@@ -331,3 +331,28 @@ Si vuelve a fallar el registro de hábitos:
 6. Revisar errores de red y consola.
 7. Consultar directamente en Supabase si existe la fila de `habit_checks`.
 8. Verificar las políticas RLS y el límite/paginación de la consulta.
+
+
+## Objetivos y porcentajes móviles (2026-09-22)
+
+Antes de publicar este frontend, ejecutar `supabase_habit_targets.sql` en el
+editor SQL de Supabase. La migración es repetible, conserva los datos y las
+políticas RLS de `habits`. También está incluida en `supabase_all_in_one.sql`.
+No se ha ejecutado automáticamente sobre producción.
+
+Cada hábito admite un objetivo opcional entero de 0 a 100, configurable al crear
+el hábito y desde «Objetivo · Editar» en su fila. Vacío elimina el objetivo;
+los hábitos existentes quedan sin objetivo. El objetivo actual se compara con
+los tres periodos; no representa un historial de objetivos anteriores.
+
+Debajo de los puntos diarios aparecen 30d, 90d y 180d. Cada ventana incluye la
+fecha seleccionada y los N−1 días anteriores (fechas locales, sin restar horas).
+Cumplimiento = Sí / (Sí + No), solo dentro de los periodos activos del hábito.
+Los días sin registro, no aplicables y archivados no cuentan como incumplidos.
+Sin respuestas evaluables se muestra «—». Al tocar cada indicador se muestran
+cumplidos, registrados, sin registrar, no aplicables, días activos si el periodo
+es parcial y comparación con el objetivo usando el porcentaje sin redondear.
+La cobertura debe consultarse antes de interpretar un porcentaje alto con pocos
+registros. El porcentaje histórico existente y los informes no se modifican.
+
+Verificación local: `node --check app-20260606b.js` y `node --test tests/*.test.mjs`.

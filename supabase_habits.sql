@@ -4,6 +4,7 @@ create table if not exists public.habits (
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(trim(name)) > 0),
   description text,
+  target_percentage smallint check (target_percentage between 0 and 100),
   is_active boolean not null default true,
   archived_at timestamptz,
   archive_reason text check (
